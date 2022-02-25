@@ -8,8 +8,8 @@ class HomeController < ApplicationController
     @bnt = 0
     @pos = Post.last
     @pos = @pos.content
-    @API_KEY = 'API_KEY'
-    @CSE_ID = 'CSE_ID'
+    @API_KEY = 'API_KEY'　　＃ここにAPIのKEYを入力
+    @CSE_ID = 'CSE_ID'　　　　　　＃ここに検索エンジンのIDを入力
     @str = "v1?key=" + @API_KEY + "&cx=" + @CSE_ID + "&q=" + @pos
     @url =  File.join("https://www.googleapis.com/customsearch/", @str)
 
