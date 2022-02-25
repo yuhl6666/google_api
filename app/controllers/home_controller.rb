@@ -8,8 +8,8 @@ class HomeController < ApplicationController
     @bnt = 0
     @pos = Post.last
     @pos = @pos.content
-    @API_KEY = 'AIzaSyC_qyrPxPdX87e0RQic_G0Vp5quwDUcpPo'
-    @CSE_ID = '77674c5dab935c6ec'
+    @API_KEY = 'API_KEY'
+    @CSE_ID = 'CSE_ID'
     @str = "v1?key=" + @API_KEY + "&cx=" + @CSE_ID + "&q=" + @pos
     @url =  File.join("https://www.googleapis.com/customsearch/", @str)
 
