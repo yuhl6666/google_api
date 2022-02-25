@@ -1,0 +1,36 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+</head>
+
+<body>
+  <article>
+  <h1><%= @pos%>の検索</h1>
+  <p>現在のクエリー数：<%= @cnt%></p>
+
+  <section>
+    <div>
+      <% if @cnt < 100%>
+        <a  href= "<%= @url%>" ><input type="submit" value="検索結果一覧表示"></a>
+      <% else %>
+        <p>100クエリを超えました、明日以降リセットしてくだい</p>
+      <% end%>
+
+      <%= form_tag("/home/clear") do %>
+        <div class="form">
+          <input type="submit" value="リセット">
+        </div>
+      <% end %>
+      
+    </div>
+  </section>
+
+
+  </article>
+</body>
+</html>
+
+
+     
