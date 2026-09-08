@@ -1,0 +1,14 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 診断データはCloud Functions(Admin SDK)経由のみで読み書きする。
+    // クライアントからの直接アクセスは一切許可しない(必ずrunDiagnosisCallable等を通す)。
+    match /diagnosisInputs/{docId} {
+      allow read, write: if false;
+    }
+    match /diagnosisResults/{docId} {
+      allow read, write: if false;
+    }
+  }
+}
