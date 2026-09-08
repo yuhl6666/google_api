@@ -1,0 +1,50 @@
+import type { DeathCoverageResult } from '../../types/diagnosis';
+
+function fmt(n: number) {
+  return `${n.toLocaleString('ja-JP', { maximumFractionDigits: 0 })}万円`;
+}
+
+export function CoverageBreakdown({ deathCoverage }: { deathCoverage: DeathCoverageResult }) {
+  const b = deathCoverage.breakdown;
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+      <h3 className="text-base font-semibold text-slate-800 mb-1">必要死亡保障額</h3>
+      <p className="text-3xl font-bold text-indigo-700 mb-4">{fmt(deathCoverage.requiredAmount)}</p>
+
+      <table className="w-full text-sm">
+        <tbody>
+          <Row label="遺族生活費(末子独立まで)" value={b.phaseALivingCost} />
+          <Row label="遺族生活費(末子独立後・配偶者)" value={b.phaseBLivingCost} />
+          <Row label="教育費残り総額" value={b.educationTotal} />
+          <Row label="葬儀費用等一時費用" value={b.funeralCost} />
+          {b.mortgageAddOn > 0 && <Row label="住宅ローン残高(団信未加入)" value={b.mortgageAddOn} />}
+          <Row label="遺族年金等 公的保障(控除)" value={-b.survivorPensionTotal} />
+          <Row label="貯蓄額(控除)" value={-b.savings} />
+          <Row label="保有資産(控除)" value={-b.otherAssets} />
+          <Row label="既存の死亡保険金(控除)" value={-b.existingDeathCoverage} />
+        </tbody>
+      </table>
+
+      <details className="mt-4">
+        <summary className="text-sm text-indigo-600 cursor-pointer">計算根拠の詳細を見る</summary>
+        <ul className="mt-2 space-y-1 text-xs text-slate-600 list-disc list-inside">
+          {deathCoverage.reasons.map((r, i) => (
+            <li key={i}>{r}</li>
+          ))}
+        </ul>
+      </details>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: number }) {
+  return (
+    <tr className="border-b border-slate-100">
+      <td className="py-1 text-slate-600">{label}</td>
+      <td className={`py-1 text-right font-medium ${value < 0 ? 'text-emerald-600' : 'text-slate-800'}`}>
+        {value < 0 ? '−' : ''}
+        {fmt(Math.abs(value))}
+      </td>
+    </tr>
+  );
+}
