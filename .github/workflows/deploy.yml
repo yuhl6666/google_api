@@ -1,0 +1,46 @@
+name: Deploy Insurance Risk Diagnosis Tool
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "insurance-risk-diagnosis/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch: {}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install & build Cloud Functions
+        working-directory: insurance-risk-diagnosis/functions
+        run: |
+          npm ci
+          npm run build
+
+      - name: Run Cloud Functions tests
+        working-directory: insurance-risk-diagnosis/functions
+        run: npm test
+
+      - name: Install & build web app
+        working-directory: insurance-risk-diagnosis/web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+
+      - name: Deploy to Firebase (Hosting / Firestore / Functions)
+        working-directory: insurance-risk-diagnosis
+        run: npx firebase-tools deploy --only hosting,firestore,functions --non-interactive
