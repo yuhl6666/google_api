@@ -25,7 +25,7 @@ function CompanyForm() {
   useEffect(() => {
     if (!user) return;
     api
-      .getCompany(user.uid)
+      .getCompany(user.id)
       .then((c) => {
         setForm(c);
         setTagsText(c.wantedPersonaTags.join(', '));
