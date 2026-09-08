@@ -104,3 +104,55 @@ firebase deploy
 ## セキュリティ
 
 `firestore.rules` はクライアントからの直接読み書きをすべて拒否し、Cloud Functions(Admin SDK)経由のみでデータへアクセスする設計です。各Cloud Functionは呼び出し元の認証済みUIDでデータを絞り込み、他ユーザーの診断結果は取得できません。
+
+## CI/CD (GitHub Actions)
+
+`main` ブランチへのマージ(このディレクトリ配下の変更のみ)をトリガーに、リポジトリルートの `.github/workflows/deploy.yml` が自動実行され、Cloud Functionsのビルド・テスト → webのビルド → `firebase deploy --only hosting,firestore,functions` を実行します。`workflow_dispatch` にも対応しているため、GitHub Actionsの画面から手動実行も可能です。
+
+初回セットアップとして、以下をご自身の環境で実施してください。
+
+### 1. `.firebaserc` に実際のプロジェクトIDを設定してコミット
+
+```bash
+firebase use --add   # または .firebaserc の YOUR_FIREBASE_PROJECT_ID を直接書き換える
+git add .firebaserc && git commit -m "Set Firebase project id" && git push
+```
+
+(プロジェクトIDは秘密情報ではないため、リポジトリにコミットして問題ありません。)
+
+### 2. フロントエンドのFirebase設定を本番ビルドに反映
+
+Vite は `web/.env.production` を本番ビルド時に読み込みます。Firebase ConsoleのWebアプリ設定値(`apiKey`等)は公開されても問題ない値のため、そのままコミットして構いません。
+
+```bash
+cp web/.env.example web/.env.production
+# web/.env.production を実際の値で編集(VITE_USE_FIREBASE_EMULATOR=false のまま)
+git add web/.env.production && git commit -m "Add production Firebase web config" && git push
+```
+
+### 3. CI用サービスアカウントの作成(Google Cloud Console)
+
+1. [Google Cloud Console](https://console.cloud.google.com/) で対象のFirebaseプロジェクトを選択
+2. **IAMと管理 > サービスアカウント > サービスアカウントを作成** で `github-actions-deploy` などの名前で作成
+3. 作成したサービスアカウントに、プロジェクトレベルで以下のロールを付与(**IAMと管理 > IAM > アクセス権を付与**):
+   - `Firebase Admin` (roles/firebase.admin)
+   - `Cloud Functions 管理者` (roles/cloudfunctions.admin)
+   - `サービス アカウント ユーザー` (roles/iam.serviceAccountUser)
+   - `Cloud Build編集者` (roles/cloudbuild.builds.editor)
+   - `Artifact Registry 管理者` (roles/artifactregistry.admin)
+   - `Firebase Rules 管理者` (roles/firebaserules.admin)
+   - `Cloud Datastore インデックス管理者` (roles/datastore.indexAdmin)
+
+   ※これは「1コマンドの `firebase deploy` でHosting/Firestore/Functionsをまとめてデプロイできる」ことを優先した構成です。権限を絞りたい場合は、Hostingのみなら `Firebase Hosting Admin` (roles/firebasehosting.admin) だけで足ります(その場合はワークフローの `--only` から `functions` と `firestore` を外してください)。
+4. 作成したサービスアカウントの **キー** タブ > **鍵を追加 > 新しい鍵を作成 > JSON** でJSON鍵ファイルをダウンロード
+5. 初めてCloud Functionsをデプロイする場合は、CIより先に一度ローカルで `firebase deploy --only functions` を実行し、必要なAPI(Cloud Build, Artifact Registry, Cloud Functions, Cloud Run等)を有効化しておくと安全です。
+
+### 4. GitHub Secretsへの登録
+
+リポジトリの **Settings > Secrets and variables > Actions > New repository secret** で、以下の名前でダウンロードしたJSON鍵ファイルの中身をそのまま貼り付けて登録してください。
+
+| Secret名 | 値 |
+| --- | --- |
+| `FIREBASE_SERVICE_ACCOUNT_KEY` | 手順3でダウンロードしたJSON鍵ファイルの中身(全文) |
+
+登録後、`main` ブランチにこのディレクトリの変更をマージすると自動デプロイが実行されます。
