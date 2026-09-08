@@ -18,7 +18,12 @@ export const db = getFirestore(app);
 export const functions = getFunctions(app);
 
 if (import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true') {
-  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-  connectFirestoreEmulator(db, '127.0.0.1', 8080);
-  connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+  // Defaults to localhost for same-machine dev. Override with the dev
+  // machine's LAN IP (e.g. 192.168.x.x) so a phone/other device on the same
+  // Wi-Fi can reach the emulators too — 127.0.0.1 in the bundle would
+  // otherwise resolve to the *viewing device* itself, not this machine.
+  const emulatorHost = import.meta.env.VITE_FIREBASE_EMULATOR_HOST || 'localhost';
+  connectAuthEmulator(auth, `http://${emulatorHost}:9099`, { disableWarnings: true });
+  connectFirestoreEmulator(db, emulatorHost, 8080);
+  connectFunctionsEmulator(functions, emulatorHost, 5001);
 }

@@ -86,6 +86,31 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=<your-project-id> node lib
 
 安全のため、`FIRESTORE_EMULATOR_HOST` が未設定の場合はスクリプトが実行を拒否します（本番 Firestore への誤投入防止）。
 
+### スマホなど他デバイスから見る（同一Wi-Fi）
+
+エミュレータ・Vite dev server は `0.0.0.0` にバインドされているので、開発機のLAN IPが分かれば同じWi-Fi上の他デバイス（スマホ等）からアクセスできます。
+
+1. 開発機のLAN IPを確認する
+   - Mac: `ipconfig getifaddr en0`
+   - Windows: `ipconfig` の「IPv4 アドレス」
+   - Linux: `hostname -I`
+   - 例: `192.168.1.23`
+2. `frontend/.env.local` の `VITE_FIREBASE_EMULATOR_HOST` を上記IPに変更する
+   ```
+   VITE_FIREBASE_EMULATOR_HOST=192.168.1.23
+   ```
+3. Vite を LAN向けに起動する
+   ```bash
+   cd frontend && npm run dev -- --host 0.0.0.0
+   ```
+4. エミュレータは通常通り起動（`firebase.json` で既に `0.0.0.0` 待受設定済み）
+   ```bash
+   firebase emulators:start --only auth,firestore,functions
+   ```
+5. スマホのブラウザで `http://192.168.1.23:5173` を開く
+
+> 注意: エミュレータ・dev serverを同一LAN上の誰でもアクセスできる状態で公開することになります（本番データではなくエミュレータのダミーデータのみが対象）。信頼できるネットワーク上でのみ行ってください。また、`.env.local`を元(`localhost`)に戻さない限りPC単体でのアクセスにも影響しないのでご安心ください（`localhost`のままでも動作します）。
+
 ## テスト
 
 ```bash
