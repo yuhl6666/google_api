@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+functions/lib/
+frontend/dist/
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
+# Env / secrets
+.env
+.env.local
+*.local
+
+# Firebase
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
+pubsub-debug.log
+
+# Editor / OS
+.DS_Store

@@ -1,0 +1,67 @@
+rules_version = '2';
+
+// Design: talents/{uid} and companies/{uid} use the Firebase Auth uid as the
+// document id, and the caller's role is carried on a custom claim
+// (request.auth.token.role == 'talent' | 'company'), set by the
+// setUserRole callable function at signup.
+//
+// matches / phaseHistory are only ever written by Cloud Functions (admin
+// SDK, which bypasses these rules) so that scoring and phase transitions
+// stay consistent. Clients may only read the matches/history rows they are
+// a participant of.
+//
+// messages are written via the sendMessage callable (Admin SDK), which
+// keeps each match's engagement counters (messageCount, first/lastMessageAt)
+// atomically in sync with the message log. Clients read messages directly
+// with a plain Firestore onSnapshot listener — that's what gives the chat
+// screen realtime updates without needing a websocket of our own.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return request.auth.token.role;
+    }
+
+    function isMatchParticipant(matchId) {
+      let m = get(/databases/$(database)/documents/matches/$(matchId)).data;
+      return signedIn() && (request.auth.uid == m.talentId || request.auth.uid == m.companyId);
+    }
+
+    match /talents/{talentId} {
+      // Browsable by any signed-in user (companies need to discover talent).
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == talentId && role() == 'talent';
+      allow delete: if false;
+    }
+
+    match /companies/{companyId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == companyId && role() == 'company';
+      allow delete: if false;
+    }
+
+    match /matches/{matchId} {
+      allow read: if signedIn() && (request.auth.uid == resource.data.talentId || request.auth.uid == resource.data.companyId);
+      // All mutations (creation, scoring, phase changes, reviews) go through
+      // callable Cloud Functions using the Admin SDK.
+      allow write: if false;
+    }
+
+    match /messages/{messageId} {
+      allow read: if resource != null && isMatchParticipant(resource.data.matchId);
+      // All writes go through the sendMessage callable (Admin SDK) so the
+      // parent match's counters stay atomically consistent with the log.
+      allow write: if false;
+    }
+
+    match /phaseHistory/{historyId} {
+      allow read: if isMatchParticipant(resource.data.matchId);
+      allow write: if false;
+    }
+  }
+}
