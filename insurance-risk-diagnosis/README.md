@@ -4,31 +4,40 @@
 
 - フロントエンド: React + TypeScript + Tailwind CSS (Vite) / `web/`
 - 診断計算ロジック: `web/src/calc/`(ブラウザ内で実行する純粋関数)
-- DB: Cloud Firestore (`diagnosisInputs`, `diagnosisResults`)。ブラウザから直接読み書きし、Firebase Authenticationのuidでアクセスを制限
-- 認証: Firebase Authentication(メール/パスワード)
+- 診断履歴の保存: ブラウザの`localStorage`(サーバーには一切送信しない)
+- 認証: Firebase Authentication(メール/パスワード、簡易ログイン)
 - ホスティング: Firebase Hosting
 - 可視化: Recharts(レーダーチャート)
 - PDF出力: html2canvas + jsPDF(クライアントサイド)
 
-**この構成はFirebaseの無料プラン(Spark)だけで完結し、課金設定は一切不要です。**
+**この構成はFirebaseの無料プラン(Spark)だけで完結し、課金設定・クレジットカード登録は一切不要です。**
 
-## なぜCloud Functionsを使っていないか
+## なぜCloud Functions・Firestoreを使っていないか
 
-当初はバックエンドをFirebase Cloud Functionsで実装していましたが、Cloud Functions(Gen 1/Gen 2とも)はFirebaseの**Blazeプラン(従量課金制、要クレジットカード登録)への加入が必須**という制約があります。このツールは「計算式を画面に表示して透明性を保つ」設計であり、計算ロジック自体を秘匿する必要がないため、完全無料で運用できるよう計算ロジックをブラウザ側に移し、Firestoreへの保存もクライアントから直接行う構成に変更しました。
+当初はバックエンドをFirebase Cloud Functions + Cloud Firestoreで実装していましたが、実際にデプロイを試したところ以下が判明しました。
 
-`functions/` ディレクトリは参考実装として残しています(将来Blazeプランへ移行しロジックをサーバー側に隠したくなった場合の移行元)。CIではビルド・テストのみ継続実行し、デプロイはしていません。
+- Cloud Functions(Gen 1/Gen 2とも)は**Blazeプラン(従量課金制、要クレジットカード登録)への加入が必須**
+- Cloud Firestoreも、このプロジェクトでは**データベースを新規作成する時点でBlazeプランへの加入が必須**(「無料枠はある」がプラン自体はBlazeでないと管理APIが使えない)
+
+このツールは「計算式を画面に表示して透明性を保つ」設計であり、計算ロジック自体を秘匿する必要がありません。またサーバー側でデータを一元管理する必然性も薄いため、次のように完全無料で運用できる構成に変更しました。
+
+- 診断計算はブラウザ側の`web/src/calc`で実行(サーバーに計算ロジックを置かない)
+- 診断履歴はそのブラウザの`localStorage`にのみ保存(**他の端末・他のブラウザからは見返せません**。これが唯一のトレードオフです)
+- Firebase Hosting(静的ファイル配信)とFirebase Authentication(ログイン)だけを使用。どちらもSparkプラン(無料)の範囲内
+
+`functions/` ディレクトリは参考実装として残しています(将来Blazeプランへ移行しサーバー側にロジックや共有データベースを持ちたくなった場合の移行元)。CIではビルド・テストのみ継続実行し、デプロイはしていません。
 
 ## ディレクトリ構成
 
 ```
 insurance-risk-diagnosis/
-  firebase.json / .firebaserc / firestore.rules / firestore.indexes.json
+  firebase.json / .firebaserc
   functions/        (未デプロイの参考実装。web/src/calcと同じロジック)
   web/              React SPA
     src/calc/        診断ロジック本体(純粋関数)。functions/src/calcと同一内容
     src/components/  ステップ入力フォーム・結果ダッシュボード
     src/pages/       画面
-    src/lib/         Firebase接続・Firestore読み書き・PDF出力
+    src/lib/         Firebase Auth接続・診断履歴のlocalStorage読み書き・PDF出力
 ```
 
 ## 診断ロジックについて
@@ -60,10 +69,9 @@ firebase use --add
 
 Firebase Consoleで以下を有効化してください:
 - Authentication(メール/パスワード プロバイダ)
-- Cloud Firestore(データベースを作成。ロケーションは任意)
 - Hosting
 
-Cloud Functionsは有効化不要です(Sparkプランのままで構いません)。
+Cloud FunctionsもCloud Firestoreも有効化不要です(Sparkプランのままで構いません)。
 
 ### 3. フロントエンドの環境変数
 
@@ -77,7 +85,7 @@ cp web/.env.example web/.env
 
 ```bash
 # ターミナル1: エミュレータ起動
-firebase emulators:start --only auth,firestore
+firebase emulators:start --only auth
 
 # ターミナル2: フロントエンド起動(.envでVITE_USE_FIREBASE_EMULATOR=trueにしておく)
 cd web && npm run dev
@@ -95,16 +103,16 @@ cd web && npm test
 
 ```bash
 cd web && npm run build
-firebase deploy --only hosting,firestore
+firebase deploy --only hosting
 ```
 
-## セキュリティ
+## セキュリティ・プライバシー
 
-`firestore.rules` は、ログイン済みユーザーが**自分のuidと一致するドキュメントのみ**読み書きできるよう制限しています。作成後の更新・削除は禁止し、診断履歴を改ざんできない監査ログとして扱います。
+診断の入力内容・結果はブラウザの`localStorage`にのみ保存され、サーバーやFirebaseには一切送信されません。ブラウザのデータを消去する(キャッシュクリア、別ブラウザ・別端末で開く等)と履歴は失われます。ログイン機能自体は画面へのアクセス制御として残していますが、データの保存先はログインユーザーと紐付いていません。
 
 ## CI/CD (GitHub Actions)
 
-`main` ブランチへのマージ(このディレクトリ配下の変更のみ)をトリガーに、リポジトリルートの `.github/workflows/deploy.yml` が自動実行され、web側のテスト・ビルド → `firebase deploy --only hosting,firestore` を実行します(Cloud Functionsはデプロイしません)。`workflow_dispatch` にも対応しているため、GitHub Actionsの画面から手動実行も可能です。
+`main` ブランチへのマージ(このディレクトリ配下の変更のみ)をトリガーに、リポジトリルートの `.github/workflows/deploy.yml` が自動実行され、web側のテスト・ビルド → `firebase deploy --only hosting` を実行します(Cloud FunctionsもFirestoreもデプロイしません)。`workflow_dispatch` にも対応しているため、GitHub Actionsの画面から手動実行も可能です。
 
 初回セットアップとして、以下をご自身の環境で実施してください。
 
@@ -127,29 +135,23 @@ cp web/.env.example web/.env.production
 git add web/.env.production && git commit -m "Add production Firebase web config" && git push
 ```
 
-### 3. Firestoreデータベースの作成(Firebase Console)
-
-Firebase Console → 対象プロジェクト → Firestore Database → 「データベースを作成」で一度だけ作成してください(ロケーションは任意、テストモード/本番モードどちらでも構いません。ルールはCIが`firestore.rules`で上書きします)。
-
-### 4. CI用サービスアカウントの作成(Google Cloud Console)
+### 3. CI用サービスアカウントの作成(Google Cloud Console)
 
 1. [Google Cloud Console](https://console.cloud.google.com/) で対象のFirebaseプロジェクトを選択
 2. **IAMと管理 > サービスアカウント > サービスアカウントを作成** で `github-actions-deploy` などの名前で作成
 3. 作成したサービスアカウントに、プロジェクトレベルで以下のロールを付与(**IAMと管理 > IAM > アクセス権を付与**):
    - `Firebase Hosting 管理者` (roles/firebasehosting.admin)
-   - `Firebase Rules 管理者` (roles/firebaserules.admin)
-   - `Cloud Datastore インデックス管理者` (roles/datastore.indexAdmin)
-   - `Service Usage 管理者` (roles/serviceusage.serviceUsageAdmin) — firebase-toolsがデプロイ前に各APIの有効化状態を確認するために必要
+   - `Service Usage 閲覧者` (roles/serviceusage.serviceUsageViewer) — firebase-toolsがデプロイ前にAPIの有効化状態を確認するために必要
 
-   Cloud Functionsをデプロイしないため、`Cloud Functions 管理者` や `Cloud Build編集者` 等は不要です。
+   Cloud FunctionsもFirestoreもデプロイしないため、それ以外のロールは不要です。
 4. 作成したサービスアカウントの **キー** タブ > **鍵を追加 > 新しい鍵を作成 > JSON** でJSON鍵ファイルをダウンロード
 
-### 5. GitHub Secretsへの登録
+### 4. GitHub Secretsへの登録
 
 リポジトリの **Settings > Secrets and variables > Actions > New repository secret** で、以下の名前でダウンロードしたJSON鍵ファイルの中身をそのまま貼り付けて登録してください。
 
 | Secret名 | 値 |
 | --- | --- |
-| `FIREBASE_SERVICE_ACCOUNT_KEY` | 手順4でダウンロードしたJSON鍵ファイルの中身(全文) |
+| `FIREBASE_SERVICE_ACCOUNT_KEY` | 手順3でダウンロードしたJSON鍵ファイルの中身(全文) |
 
 登録後、`main` ブランチにこのディレクトリの変更をマージするか、Actions画面から手動実行(`workflow_dispatch`)すると自動デプロイが実行されます。

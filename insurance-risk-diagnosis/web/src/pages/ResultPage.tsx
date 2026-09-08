@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import type { DiagnosisInput, DiagnosisResult } from '../types/diagnosis';
-import { getDiagnosisDetail } from '../lib/diagnosisApi';
+import { getDiagnosisDetail } from '../lib/diagnosisStore';
 import { RadarChartPanel } from '../components/dashboard/RadarChartPanel';
 import { CoverageBreakdown } from '../components/dashboard/CoverageBreakdown';
 import { ScoreReasons } from '../components/dashboard/ScoreReasons';

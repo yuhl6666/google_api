@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { HistoryItem } from '../types/diagnosis';
-import { listDiagnosisHistory } from '../lib/diagnosisApi';
+import { listDiagnosisHistory } from '../lib/diagnosisStore';
 
 export function HistoryPage() {
   const [items, setItems] = useState<HistoryItem[] | null>(null);

@@ -6,7 +6,7 @@ import { BasicInfoStep } from '../components/steps/BasicInfoStep';
 import { AssetStep } from '../components/steps/AssetStep';
 import { InsuranceStep } from '../components/steps/InsuranceStep';
 import { HealthStep } from '../components/steps/HealthStep';
-import { runDiagnosis } from '../lib/diagnosisApi';
+import { runDiagnosis } from '../lib/diagnosisStore';
 
 const STEPS = ['基本情報', '資産・負債', '既存保険', '健康状態', '確認'];
 
