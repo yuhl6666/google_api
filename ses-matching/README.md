@@ -4,10 +4,18 @@ SES（システムエンジニアリングサービス）企業向けに、案�
 自動でスコアリング・マッチングする社内ツールです。
 
 - フロントエンド: React + TypeScript + Tailwind CSS（Vite）
-- バックエンド: Firebase Cloud Functions（TypeScript / Express）
+- バックエンド: **なし（Cloud Functions不使用）** — ブラウザからCloud Firestoreへ直接アクセス
 - DB: Cloud Firestore
 - 認証: Firebase Authentication（メール/パスワード、社内利用前提）
 - ホスティング: Firebase Hosting
+
+> **アーキテクチャについて**: 当初はCloud Functions(Express API)でスコアリング/CRUDを
+> 実装していましたが、Cloud FunctionsのデプロイにはBlaze(従量課金)プランへの切り替えが
+> 必須になるため、**無料のSparkプランだけで運用できるよう、スコアリングエンジンを
+> フロントエンド(ブラウザ)に移植し、Firestoreクライアントアプリから直接読み書きする構成**
+> に変更しました。Firestoreのセキュリティルール(`firestore.rules`)でログイン済みユーザー
+> のみアクセスできるよう制御しています。Cloud Functions版のコード(`functions/`)は
+> 参考実装として残していますが、現在はデプロイ対象に含めていません（後述）。
 
 ---
 
@@ -92,7 +100,9 @@ updatedAt: Timestamp
 
 ## 2. マッチングエンジン仕様（自前実装、外部APIなし）
 
-すべて `functions/src/scoring/` 配下の純粋関数として実装（Firestoreに依存しない）。
+すべて `web/src/scoring/` 配下の純粋関数として実装（フレームワークに依存しない）。
+ブラウザ上で実行され、Firestoreからは案件・要員データを読み取るだけで、計算結果
+(`matchResults`)のみを書き込みます。
 
 - `normalize.ts`: スキル名表記ゆれ辞書（React/ReactJS/react.js 等）による正規化
 - `skillScore.ts`: 必須スキル充足率(経験年数条件含む) + 尚可スキルボーナス → 0〜1
@@ -103,7 +113,11 @@ updatedAt: Timestamp
 - `weightLearning.ts`: フィードバック履歴（採用/却下）から、採用グループと却下グループの
   スコア傾向の差分をもとに重みを微調整するシンプルな加重更新ロジック（勾配降下法は未使用）
 
-単体テストは `functions/src/scoring/__tests__/` に41件あり、`npm test`（functions配下）で実行できます。
+単体テストは `web/src/scoring/__tests__/` に41件あり、`npm test`（web配下、vitest）で
+実行できます。
+
+> `functions/src/scoring/` にも同一のコードが残っています（Cloud Functions版の参考実装）。
+> 現在のフロントエンド版(`web/src/scoring/`)が本番で使われる唯一の実体です。
 
 ---
 
@@ -112,21 +126,16 @@ updatedAt: Timestamp
 ```
 ses-matching/
   firebase.json / .firebaserc / firestore.rules / firestore.indexes.json
-  functions/           # Cloud Functions (API + スコアリングエンジン)
+  web/                 # React + TypeScript + Tailwind フロントエンド (Vite) ← 本番で使用
     src/
-      scoring/         # 純粋関数のスコアリングエンジン + テスト
-      api/             # Express アプリ (ルーティング, 認証ミドルウェア)
-      seed/            # サンプルデータ投入スクリプト
-      firestoreAdmin.ts
-      models.ts
-      index.ts         # Cloud Functions エントリポイント (`api` という名前でexport)
-  web/                 # React + TypeScript + Tailwind フロントエンド (Vite)
-    src/
+      scoring/         # 純粋関数のスコアリングエンジン + テスト(vitest)
       pages/           # 案件/要員/マッチング結果/重み設定の各画面
       components/
       context/         # 認証コンテキスト
-      api.ts           # Cloud Functions APIクライアント
-      firebase.ts       # Firebase初期化
+      api.ts           # Firestoreクライアントアクセス層(CRUD・マッチング実行・フィードバック)
+      firebase.ts      # Firebase初期化 (Auth + Firestore)
+  functions/           # [参考/現在未使用] Cloud Functions版のAPI実装一式
+                        # Blazeプランに切り替えて再デプロイする場合のみ使用
 ```
 
 ---
@@ -136,12 +145,12 @@ ses-matching/
 ### 4.1 前提
 - Node.js 20系推奨（開発確認はNode 22でも動作）
 - Firebase CLI: `npm install -g firebase-tools`（または `npx firebase-tools`）
-- Firebaseプロジェクトを1つ作成し、Firestore / Authentication（メール・パスワード）を有効化
+- Firebaseプロジェクトを1つ作成し、**Firestore** と **Authentication（メール/パスワード）**
+  を有効化（**Blazeプランへの切り替えは不要**です。Spark(無料)プランのままでOK）
 
 ### 4.2 依存関係のインストール
 ```bash
-cd ses-matching/functions && npm install
-cd ../web && npm install
+cd ses-matching/web && npm install
 ```
 
 ### 4.3 Firebaseプロジェクトの紐付け
@@ -159,74 +168,85 @@ firebase use --add   # 作成したプロジェクトIDを選択し、.firebaser
 cp web/.env.example web/.env
 ```
 
-### 4.5 ローカル動作確認（エミュレータ）
+### 4.5 ローカル動作確認（エミュレータ、無料・ログイン不要）
 ```bash
-# functionsをビルド
-cd ses-matching/functions && npm run build
-
-# ルートディレクトリ(ses-matching)でエミュレータ起動
-cd ..
-firebase emulators:start --only firestore,auth,functions
+# ルートディレクトリ(ses-matching)でFirestore/Authエミュレータ起動
+firebase emulators:start --only firestore,auth
 ```
 
-別ターミナルでサンプルデータを投入:
+別ターミナルでサンプルデータを投入（Admin SDKを使うため`functions/`の依存関係だけ利用）:
 ```bash
 cd ses-matching/functions
+npm install
+npm run build
 export FIRESTORE_EMULATOR_HOST=127.0.0.1:8080
 export GCLOUD_PROJECT=<your-project-id>
-npm run build && node lib/seed/runSeed.js
+node lib/seed/runSeed.js
 ```
 
-フロントエンドはエミュレータのFunctions URLを指すよう `web/.env` を設定して起動:
+フロントエンドはエミュレータを使うよう `web/.env` に以下を設定して起動:
+```
+VITE_USE_EMULATORS=true
+```
 ```bash
-# web/.env に以下を追加(プロジェクトIDは実際のものに置換)
-# VITE_API_BASE_URL=http://127.0.0.1:5001/<project-id>/asia-northeast1/api
-# VITE_USE_AUTH_EMULATOR=true
-
 cd ses-matching/web
 npm run dev
 ```
 
-Authエミュレータでテストユーザーを作成してログインするか、Firebase Consoleの
-Authentication画面からメール/パスワードユーザーを作成してください。
+Authエミュレータでテストユーザーを作成してログインしてください（Emulator UI
+http://127.0.0.1:4000/auth から追加するか、REST APIで作成できます）。
 
 ### 4.6 単体テストの実行
 ```bash
-cd ses-matching/functions
+cd ses-matching/web
 npm test
 ```
 
-### 4.7 本番デプロイ
+### 4.7 本番デプロイ（無料・Blaze不要）
 ```bash
 cd ses-matching
-firebase deploy --only firestore:rules,firestore:indexes,functions,hosting
+firebase deploy --only firestore:rules,firestore:indexes,hosting
 ```
-デプロイ前に `web/.env` の `VITE_API_BASE_URL` を `/api`（Hostingのrewrite経由）に、
-`VITE_USE_AUTH_EMULATOR` を `false` に戻してから `npm run build` してください
-（`firebase deploy` で `web/dist` がHostingに配信されます）。
+デプロイ前に `web/.env` の `VITE_USE_EMULATORS` を `false` にしてから
+`cd web && npm run build` してください（`dist/` がHostingに配信されます）。
 
-> 本セッションの実行環境にはFirebaseプロジェクトの認証情報が無いため、実際の
-> `firebase deploy` の実行はできていません。上記コマンドで、Firebaseプロジェクトを
-> 用意した上でご自身の環境から実行してください。ローカルでは、Firestore/Auth/Functions
-> エミュレータ上で本セッション内にサンプルデータ投入・全画面の動作確認（案件/要員の
-> 登録・編集・削除、マッチング実行、スコア内訳表示、フィードバック登録によるステータス
-> 変更、重み設定の保存）まで実施済みです。
+### 4.8 本番Firestoreへのサンプルデータ投入（任意）
+Firebase Console →「プロジェクトの設定」→「サービスアカウント」→
+「新しい秘密鍵の生成」でJSONキーを取得し（無料機能、Blaze不要）:
+```bash
+cd ses-matching/functions
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+export GCLOUD_PROJECT=<your-project-id>
+npm run build && node lib/seed/runSeed.js
+```
+
+### 4.9 セキュリティ上の注意
+- `firestore.rules` は「ログイン済みユーザーなら読み書き可」という設計です。ログイン画面に
+  新規登録フォームは置いていませんが、Firebase Authのメール/パスワード認証はAPIを直接叩けば
+  誰でも自己登録できてしまうため、**社外の第三者にアプリのURLを不用意に共有しない**、
+  **利用者アカウントはFirebase Console側で手動作成する運用にする**、といった対策を推奨します。
+  より厳格に制限したい場合は、将来的にBlazeプランへ切り替えて
+  Cloud Functionsのユーザー作成トリガーで許可ドメインを制限する、App Checkを導入する、
+  などの拡張が可能です（`functions/`のコードをベースに拡張できます）。
 
 ---
 
-## 5. API一覧（Cloud Functions / Express、要Firebase Authトークン）
+## 5. データアクセス（Firestore直接、REST APIなし）
 
-| Method | Path | 内容 |
-| --- | --- | --- |
-| GET/POST | `/projects` | 案件一覧取得 / 登録 |
-| GET/PUT/DELETE | `/projects/:id` | 案件の取得/更新/削除 |
-| GET/POST | `/engineers` | 要員一覧取得 / 登録 |
-| GET/PUT/DELETE | `/engineers/:id` | 要員の取得/更新/削除 |
-| GET | `/matches` | マッチング結果一覧（`projectId`/`engineerId`/`status`で絞込可） |
-| POST | `/matches/run` | マッチング実行（`projectId`/`engineerId`省略で全件再計算） |
-| PATCH | `/matches/:id` | ステータス変更（未対応/提案済/成約/却下） |
-| GET/POST | `/feedback` | フィードバック履歴取得 / 登録（採用/却下→重み自動再学習） |
-| GET/PUT | `/weights` | スコア重み設定の取得 / 更新 |
+`web/src/api.ts` が唯一のデータアクセス層です。Cloud Functions/REST APIは使わず、
+Firebase Authで認証したユーザーとしてFirestoreクライアントSDKを直接呼び出します。
+
+| 関数 | 内容 |
+| --- | --- |
+| `listProjects` / `getProject` / `createProject` / `updateProject` / `deleteProject` | 案件CRUD |
+| `listEngineers` / `getEngineer` / `createEngineer` / `updateEngineer` / `deleteEngineer` | 要員CRUD |
+| `listMatches(params?)` | マッチング結果一覧（`projectId`/`engineerId`/`status`で絞込可） |
+| `runMatching(params)` | マッチング実行（ブラウザ側で`calcTotalScore`を計算し`matchResults`へ書き込み） |
+| `updateMatchStatus(id, status)` | ステータス変更（未対応/提案済/成約/却下） |
+| `submitFeedback(data)` | フィードバック登録（`feedbackLog`へ追記→重み自動再学習→`settings/weights`更新） |
+| `getWeights` / `putWeights` | スコア重み設定の取得 / 更新 |
+
+書き込み時のバリデーションは `firestore.rules` 側で行っています（必須フィールドの型チェック等）。
 
 ---
 
@@ -234,5 +254,4 @@ firebase deploy --only firestore:rules,firestore:indexes,functions,hosting
 
 `functions/src/seed/data.ts` に案件10件・要員10件を用意しています。表記ゆれ辞書の
 動作確認用に、React/ReactJS、AWS/Amazon Web Services、Node/Node.js などをあえて
-案件側・要員側で違う表記にしています。`npm run seed`（またはビルド後 `node lib/seed/runSeed.js`）
-で投入できます。
+案件側・要員側で違う表記にしています。投入方法は「4.5 / 4.8」を参照してください。

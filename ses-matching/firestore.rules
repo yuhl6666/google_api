@@ -1,13 +1,68 @@
 rules_version = '2';
 
-// このアプリはフロントエンドから直接Firestoreへアクセスせず、
-// 認証済みユーザーのIDトークンをCloud Functions(API)経由で検証してから
-// Admin SDKで読み書きする構成のため、クライアントSDKからの直接アクセスは
-// 全面的に拒否する。
+// このアプリはCloud Functionsを使わず、ブラウザ(Firebaseクライアントアプリ)から
+// 直接Firestoreを読み書きする構成のため、認証済みユーザーであれば読み書き可能とし、
+// 書き込み時は最低限のスキーマ検証を行う(社内利用前提でロール分けは行わない)。
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if false;
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isNonEmptyString(v) {
+      return v is string && v.size() > 0;
+    }
+
+    match /projects/{projectId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && isNonEmptyString(request.resource.data.name)
+        && request.resource.data.requiredSkills is list
+        && request.resource.data.rateMin is number
+        && request.resource.data.rateMax is number
+        && request.resource.data.rateMax >= request.resource.data.rateMin
+        && isNonEmptyString(request.resource.data.location)
+        && request.resource.data.remoteAllowed is bool
+        && isNonEmptyString(request.resource.data.startDate);
+      allow delete: if isSignedIn();
+    }
+
+    match /engineers/{engineerId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && isNonEmptyString(request.resource.data.name)
+        && request.resource.data.skills is list
+        && request.resource.data.desiredRateMin is number
+        && request.resource.data.desiredRateMax is number
+        && request.resource.data.desiredRateMax >= request.resource.data.desiredRateMin
+        && request.resource.data.desiredLocations is list
+        && request.resource.data.remoteDesired is bool
+        && isNonEmptyString(request.resource.data.availableFrom);
+      allow delete: if isSignedIn();
+    }
+
+    match /matchResults/{matchId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && isNonEmptyString(request.resource.data.projectId)
+        && isNonEmptyString(request.resource.data.engineerId)
+        && request.resource.data.totalScore is number
+        && request.resource.data.status in ['未対応', '提案済', '成約', '却下'];
+      allow delete: if isSignedIn();
+    }
+
+    match /feedbackLog/{feedbackId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && isNonEmptyString(request.resource.data.matchId)
+        && request.resource.data.decision in ['採用', '却下'];
+      // フィードバック履歴は重み学習の入力になるため、追記のみ許可し改ざん・削除は禁止する
+      allow update, delete: if false;
+    }
+
+    match /settings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
     }
   }
 }
