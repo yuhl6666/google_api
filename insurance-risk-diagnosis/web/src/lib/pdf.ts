@@ -1,9 +1,12 @@
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
-
 // 指定した要素の内容を画像化し、A4サイズのPDFに複数ページへ分割して出力する。
 // 日本語フォントをjsPDFへ埋め込む代わりに、DOMを画像化することで文字化けを避けている。
+// jsPDF/html2canvasは重いライブラリなので、初期バンドルには含めずボタンが押された時だけ読み込む。
 export async function exportElementToPdf(elementId: string, fileName: string): Promise<void> {
+  const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+    import('jspdf'),
+    import('html2canvas'),
+  ]);
+
   const element = document.getElementById(elementId);
   if (!element) throw new Error(`PDF出力対象の要素が見つかりません: ${elementId}`);
 
