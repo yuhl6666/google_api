@@ -142,6 +142,7 @@ git add web/.env.production && git commit -m "Add production Firebase web config
    - `Artifact Registry 管理者` (roles/artifactregistry.admin)
    - `Firebase Rules 管理者` (roles/firebaserules.admin)
    - `Cloud Datastore インデックス管理者` (roles/datastore.indexAdmin)
+   - `Service Usage 管理者` (roles/serviceusage.serviceUsageAdmin) — firebase-toolsがデプロイ前に各APIの有効化状態を確認・有効化するために必要
 
    ※これは「1コマンドの `firebase deploy` でHosting/Firestore/Functionsをまとめてデプロイできる」ことを優先した構成です。権限を絞りたい場合は、Hostingのみなら `Firebase Hosting Admin` (roles/firebasehosting.admin) だけで足ります(その場合はワークフローの `--only` から `functions` と `firestore` を外してください)。
 4. 作成したサービスアカウントの **キー** タブ > **鍵を追加 > 新しい鍵を作成 > JSON** でJSON鍵ファイルをダウンロード
