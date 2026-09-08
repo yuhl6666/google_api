@@ -20,20 +20,21 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install & build Cloud Functions
+      # Cloud Functionsは現在デプロイしていない(Blazeプラン=課金が必須なため)。
+      # 診断ロジックはweb/src/calcへ移植して同一のテストで検証しており、
+      # ここではfunctions/配下の参照実装が壊れていないことだけを継続確認する。
+      - name: Build & test reference Cloud Functions implementation
         working-directory: insurance-risk-diagnosis/functions
         run: |
           npm ci
           npm run build
+          npm test
 
-      - name: Run Cloud Functions tests
-        working-directory: insurance-risk-diagnosis/functions
-        run: npm test
-
-      - name: Install & build web app
+      - name: Install, test & build web app
         working-directory: insurance-risk-diagnosis/web
         run: |
           npm ci
+          npm test
           npm run build
 
       - name: Authenticate to Google Cloud
@@ -41,6 +42,6 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
 
-      - name: Deploy to Firebase (Hosting / Firestore / Functions)
+      - name: Deploy to Firebase (Hosting / Firestore only — Spark plan, no billing required)
         working-directory: insurance-risk-diagnosis
-        run: npx firebase-tools deploy --only hosting,firestore,functions --non-interactive
+        run: npx firebase-tools deploy --only hosting,firestore --non-interactive

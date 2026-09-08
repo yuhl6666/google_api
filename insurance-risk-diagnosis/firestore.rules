@@ -2,13 +2,18 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 診断データはCloud Functions(Admin SDK)経由のみで読み書きする。
-    // クライアントからの直接アクセスは一切許可しない(必ずrunDiagnosisCallable等を通す)。
+    // Cloud Functionsを使わず、ブラウザから直接読み書きする構成(Sparkプラン=無料枠のみで運用するため)。
+    // 自分のuidが紐づくドキュメントしか読み書きできず、他ユーザーの診断結果は閲覧・改ざんできない。
+    // 一度作成した診断記録は監査ログとして扱い、更新・削除は許可しない。
     match /diagnosisInputs/{docId} {
-      allow read, write: if false;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.uid;
+      allow read: if request.auth != null && request.auth.uid == resource.data.uid;
+      allow update, delete: if false;
     }
     match /diagnosisResults/{docId} {
-      allow read, write: if false;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.uid;
+      allow read: if request.auth != null && request.auth.uid == resource.data.uid;
+      allow update, delete: if false;
     }
   }
 }
