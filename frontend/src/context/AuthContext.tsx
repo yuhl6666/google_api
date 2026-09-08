@@ -1,13 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import {
-  User,
-  onAuthStateChanged,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut as firebaseSignOut,
-} from 'firebase/auth';
-import { auth } from '../lib/firebase';
-import { api } from '../lib/api';
+import type { User } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
 import { Role } from '../types';
 
 interface AuthContextValue {
@@ -21,38 +14,54 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+async function fetchRole(uid: string): Promise<Role | null> {
+  const { data, error } = await supabase.from('profiles').select('role').eq('id', uid).maybeSingle();
+  if (error || !data) return null;
+  return data.role as Role;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<Role | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    return onAuthStateChanged(auth, async (u) => {
-      setUser(u);
-      if (u) {
-        const token = await u.getIdTokenResult(true);
-        setRole((token.claims.role as Role | undefined) ?? null);
-      } else {
-        setRole(null);
-      }
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setRole(session?.user ? await fetchRole(session.user.id) : null);
       setLoading(false);
     });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setUser(session?.user ?? null);
+      setRole(session?.user ? await fetchRole(session.user.id) : null);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   async function signUp(email: string, password: string, newRole: Role) {
-    const cred = await createUserWithEmailAndPassword(auth, email, password);
-    await api.setUserRole(newRole);
-    await cred.user.getIdToken(true);
-    const token = await cred.user.getIdTokenResult(true);
-    setRole((token.claims.role as Role | undefined) ?? null);
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) throw error;
+    if (!data.user) {
+      throw new Error(
+        'サインアップにはメール確認が必要な設定になっています。確認メールのリンクを開いてからログインしてください。'
+      );
+    }
+    const { error: profileError } = await supabase.from('profiles').insert({ id: data.user.id, role: newRole });
+    if (profileError) throw profileError;
+    setRole(newRole);
   }
 
   async function signIn(email: string, password: string) {
-    await signInWithEmailAndPassword(auth, email, password);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
   }
 
   async function signOut() {
-    await firebaseSignOut(auth);
+    await supabase.auth.signOut();
   }
 
   return (

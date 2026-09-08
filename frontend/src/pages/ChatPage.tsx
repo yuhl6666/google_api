@@ -1,19 +1,31 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { collection, onSnapshot, orderBy, query, Timestamp, where } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import { Message } from '../types';
 
+interface MessageRow {
+  id: string;
+  match_id: string;
+  sender_id: string;
+  sender_role: Message['senderRole'];
+  body: string;
+  created_at: string;
+}
+
+function rowToMessage(r: MessageRow): Message {
+  return { id: r.id, matchId: r.match_id, senderId: r.sender_id, senderRole: r.sender_role, body: r.body, createdAt: r.created_at };
+}
+
 function formatTime(createdAt: unknown): string {
-  if (createdAt instanceof Timestamp) return createdAt.toDate().toLocaleString('ja-JP');
+  if (typeof createdAt === 'string') return new Date(createdAt).toLocaleString('ja-JP');
   return '送信中...';
 }
 
 export function ChatPage() {
   const { matchId } = useParams<{ matchId: string }>();
-  const { user, role } = useAuth();
+  const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -21,12 +33,34 @@ export function ChatPage() {
 
   useEffect(() => {
     if (!matchId) return;
-    // Realtime listener — no websocket setup needed, Firestore pushes updates directly.
-    const q = query(collection(db, 'messages'), where('matchId', '==', matchId), orderBy('createdAt', 'asc'));
-    const unsub = onSnapshot(q, (snap) => {
-      setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Message));
-    });
-    return unsub;
+
+    let cancelled = false;
+    supabase
+      .from('messages')
+      .select('*')
+      .eq('match_id', matchId)
+      .order('created_at', { ascending: true })
+      .then(({ data }) => {
+        if (!cancelled && data) setMessages((data as MessageRow[]).map(rowToMessage));
+      });
+
+    // Realtime subscription — Supabase streams Postgres row changes over a
+    // websocket it manages internally, so no manual polling is needed.
+    const channel = supabase
+      .channel(`messages:${matchId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${matchId}` },
+        (payload) => {
+          setMessages((prev) => [...prev, rowToMessage(payload.new as MessageRow)]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
   }, [matchId]);
 
   useEffect(() => {
@@ -35,7 +69,7 @@ export function ChatPage() {
 
   async function handleSend(e: FormEvent) {
     e.preventDefault();
-    if (!body.trim() || !user || !matchId || !role) return;
+    if (!body.trim() || !user || !matchId) return;
     setError(null);
     try {
       await api.sendMessage(matchId, body.trim());
@@ -58,7 +92,7 @@ export function ChatPage() {
 
       <div className="flex-1 space-y-2 overflow-y-auto rounded-lg border border-slate-200 bg-white p-3">
         {messages.map((m) => {
-          const mine = m.senderId === user?.uid;
+          const mine = m.senderId === user?.id;
           return (
             <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${mine ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-900'}`}>

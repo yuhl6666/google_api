@@ -1,12 +1,15 @@
-import { Company, Talent } from '../types';
+import { Company, Talent } from '../src/types';
 
-type SeedTalent = Omit<Talent, 'createdAt' | 'updatedAt'>;
-type SeedCompany = Omit<Company, 'createdAt' | 'updatedAt'>;
+export interface SeedTalent extends Omit<Talent, 'id' | 'uid'> {
+  email: string;
+}
+export interface SeedCompany extends Omit<Company, 'id' | 'uid'> {
+  email: string;
+}
 
 export const SEED_TALENTS: SeedTalent[] = [
   {
-    id: 't1',
-    uid: 't1',
+    email: 'talent1@example.com',
     name: '田中 健一',
     skills: ['経理', 'EC運営', 'Webマーケ'],
     interestedIndustries: ['製造業', '卸売業'],
@@ -19,8 +22,7 @@ export const SEED_TALENTS: SeedTalent[] = [
     bio: '大手製造業で経理・EC運営を10年経験。将来は地方の製造業の事業承継に携わりたい。',
   },
   {
-    id: 't2',
-    uid: 't2',
+    email: 'talent2@example.com',
     name: '佐藤 美咲',
     skills: ['Webデザイン', 'SNS運用', 'EC運営'],
     interestedIndustries: ['飲食業', '観光業'],
@@ -33,8 +35,7 @@ export const SEED_TALENTS: SeedTalent[] = [
     bio: 'フリーランスのWebデザイナー。副業の範囲でスポット的に関わりたい。',
   },
   {
-    id: 't3',
-    uid: 't3',
+    email: 'talent3@example.com',
     name: '鈴木 大輔',
     skills: ['製造業経験', '生産管理', '品質管理'],
     interestedIndustries: ['製造業'],
@@ -47,8 +48,7 @@ export const SEED_TALENTS: SeedTalent[] = [
     bio: '精密機械メーカーで生産管理を15年。現場に入って改善から関わりたい。',
   },
   {
-    id: 't4',
-    uid: 't4',
+    email: 'talent4@example.com',
     name: '山本 花子',
     skills: ['経営企画', '財務', 'M&A'],
     interestedIndustries: ['小売業', '卸売業'],
@@ -61,8 +61,7 @@ export const SEED_TALENTS: SeedTalent[] = [
     bio: '事業会社で経営企画・M&A実務に従事。将来的な独立・事業承継を検討中。',
   },
   {
-    id: 't5',
-    uid: 't5',
+    email: 'talent5@example.com',
     name: '高橋 拓也',
     skills: ['農業経験', 'EC運営', '観光開発'],
     interestedIndustries: ['農業', '観光業'],
@@ -78,8 +77,7 @@ export const SEED_TALENTS: SeedTalent[] = [
 
 export const SEED_COMPANIES: SeedCompany[] = [
   {
-    id: 'c1',
-    uid: 'c1',
+    email: 'company1@example.com',
     name: '有限会社信州フーズ',
     industry: '製造業',
     prefecture: '長野県',
@@ -92,8 +90,7 @@ export const SEED_COMPANIES: SeedCompany[] = [
     successionTimeframe: '1-3y',
   },
   {
-    id: 'c2',
-    uid: 'c2',
+    email: 'company2@example.com',
     name: '株式会社湘南デザイン工房',
     industry: '飲食業',
     prefecture: '神奈川県',
@@ -105,8 +102,7 @@ export const SEED_COMPANIES: SeedCompany[] = [
     successionTimeframe: '5y+',
   },
   {
-    id: 'c3',
-    uid: 'c3',
+    email: 'company3@example.com',
     name: '中京精密工業株式会社',
     industry: '製造業',
     prefecture: '愛知県',
@@ -119,8 +115,7 @@ export const SEED_COMPANIES: SeedCompany[] = [
     successionTimeframe: 'immediate',
   },
   {
-    id: 'c4',
-    uid: 'c4',
+    email: 'company4@example.com',
     name: '浪速商事株式会社',
     industry: '卸売業',
     prefecture: '大阪府',
@@ -132,8 +127,7 @@ export const SEED_COMPANIES: SeedCompany[] = [
     successionTimeframe: '1-3y',
   },
   {
-    id: 'c5',
-    uid: 'c5',
+    email: 'company5@example.com',
     name: '有限会社十勝ファーム',
     industry: '農業',
     prefecture: '北海道',
@@ -145,3 +139,5 @@ export const SEED_COMPANIES: SeedCompany[] = [
     successionTimeframe: '3-5y',
   },
 ];
+
+export const SEED_PASSWORD = 'password123!';

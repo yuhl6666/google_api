@@ -27,7 +27,7 @@ function TalentForm() {
   useEffect(() => {
     if (!user) return;
     api
-      .getTalent(user.uid)
+      .getTalent(user.id)
       .then((t) => {
         setForm(t);
         setSkillsText(t.skills.join(', '));

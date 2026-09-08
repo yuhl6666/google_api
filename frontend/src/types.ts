@@ -1,8 +1,9 @@
 /**
- * Frontend-side mirror of the Firestore domain types (functions/src/types.ts).
- * Kept as plain data types (Firestore Timestamps arrive as {seconds,nanoseconds}
- * objects from the client SDK, exposed here as `unknown` and converted at the
- * display layer via toDateLabel()).
+ * Domain types shared across the frontend, matching the shape of the
+ * Supabase tables in supabase/migrations (snake_case columns are mapped to
+ * these camelCase fields in src/lib/api.ts). Timestamp columns arrive as
+ * ISO date strings from the client SDK, typed here as `unknown` and parsed
+ * at the display layer with `new Date(...)`.
  */
 
 export type WorkStyle = 'remote' | 'onsite' | 'both';
@@ -12,6 +13,17 @@ export type MatchPhase = 1 | 2 | 3;
 export type MatchStatus = 'active' | 'declined' | 'completed';
 export type SenderRole = 'talent' | 'company';
 export type Role = 'talent' | 'company';
+
+/** 8-block regional grouping used by the region-proximity scoring table (src/calc/scoring/regions.ts). */
+export type RegionBlock =
+  | 'hokkaido'
+  | 'tohoku'
+  | 'kanto'
+  | 'chubu'
+  | 'kinki'
+  | 'chugoku'
+  | 'shikoku'
+  | 'kyushu_okinawa';
 
 export interface Talent {
   id: string;

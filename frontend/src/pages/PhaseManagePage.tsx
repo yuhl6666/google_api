@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Timestamp } from 'firebase/firestore';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Match, PhaseHistoryEntry } from '../types';
@@ -17,7 +16,7 @@ const PHASE_LABEL: Record<number | string, string> = {
 };
 
 function formatDate(ts: unknown): string {
-  if (ts instanceof Timestamp) return ts.toDate().toLocaleString('ja-JP');
+  if (typeof ts === 'string') return new Date(ts).toLocaleString('ja-JP');
   return '-';
 }
 
