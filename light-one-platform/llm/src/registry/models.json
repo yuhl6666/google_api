@@ -1,0 +1,92 @@
+{
+  "models": [
+    {
+      "id": "general-local",
+      "provider": "local",
+      "domain": "general",
+      "capabilities": ["classification", "extraction", "normalization", "generation"],
+      "costClass": "local",
+      "latencyClass": "low",
+      "privacyClass": "high",
+      "runtime": { "kind": "ollama", "model": "llama3.1:8b" },
+      "status": "active"
+    },
+    {
+      "id": "ses-classifier",
+      "provider": "local",
+      "domain": "ses",
+      "capabilities": ["classification"],
+      "costClass": "local",
+      "latencyClass": "low",
+      "privacyClass": "high",
+      "runtime": { "kind": "ollama", "model": "llama3.1:8b" },
+      "status": "active"
+    },
+    {
+      "id": "ses-normalizer",
+      "provider": "local",
+      "domain": "ses",
+      "capabilities": ["normalization", "extraction"],
+      "costClass": "local",
+      "latencyClass": "low",
+      "privacyClass": "high",
+      "runtime": { "kind": "ollama", "model": "llama3.1:8b" },
+      "status": "planned"
+    },
+    {
+      "id": "insurance-classifier",
+      "provider": "local",
+      "domain": "insurance",
+      "capabilities": ["classification"],
+      "costClass": "local",
+      "latencyClass": "low",
+      "privacyClass": "high",
+      "runtime": { "kind": "ollama", "model": "llama3.1:8b" },
+      "status": "planned"
+    },
+    {
+      "id": "succession-analyzer",
+      "provider": "local",
+      "domain": "succession",
+      "capabilities": ["reasoning", "extraction"],
+      "costClass": "local",
+      "latencyClass": "medium",
+      "privacyClass": "high",
+      "runtime": { "kind": "ollama", "model": "llama3.1:8b" },
+      "status": "planned"
+    },
+    {
+      "id": "gpt-mini",
+      "provider": "openai",
+      "domain": "general",
+      "capabilities": ["classification", "extraction"],
+      "costClass": "low",
+      "latencyClass": "low",
+      "privacyClass": "low",
+      "runtime": { "kind": "openai", "model": "gpt-4o-mini" },
+      "status": "active"
+    },
+    {
+      "id": "gemini-flash",
+      "provider": "gemini",
+      "domain": "general",
+      "capabilities": ["classification", "extraction"],
+      "costClass": "low",
+      "latencyClass": "low",
+      "privacyClass": "low",
+      "runtime": { "kind": "gemini", "model": "gemini-2.0-flash" },
+      "status": "active"
+    },
+    {
+      "id": "claude-sonnet",
+      "provider": "claude",
+      "domain": "general",
+      "capabilities": ["classification", "extraction", "generation", "reasoning"],
+      "costClass": "high",
+      "latencyClass": "medium",
+      "privacyClass": "low",
+      "runtime": { "kind": "claude", "model": "claude-sonnet-5" },
+      "status": "active"
+    }
+  ]
+}
