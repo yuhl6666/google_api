@@ -1,4 +1,16 @@
-# Light One — Local LLM Platform (Phase 1)
+# Light One — Local LLM Platform (Phase 1 + Phase 2 validation harness)
+
+> **Remote environment limitation:** Ollama/model downloads unavailable due to egress allowlist.
+> **Real-model benchmark:** Pending execution on Light One Linux environment.
+>
+> This repo's remote development sandbox blocks outbound access to both
+> `ollama.com` and `huggingface.co` (organization egress policy — confirmed
+> via explicit 403 policy denials, not a bug to work around). So nothing
+> in this codebase has ever downloaded Ollama or a model here, and no real
+> local-model benchmark numbers exist yet. Everything in `models/ses/benchmark/`
+> is built and tested end-to-end against `MockLocalModel` instead, and is
+> ready to run for real — unmodified — the moment it reaches a machine
+> where `ollama serve` is actually reachable. See "Phase 2" below.
 
 Foundation for running **multiple task-specific Local/API models** behind
 one Router, instead of one general-purpose LLM for everything. This is a
@@ -33,8 +45,9 @@ User / Automation Engine
 ```
 light-one-platform/
 ├── docs/
-│   ├── architecture/runtime-comparison.md   Ollama vs llama.cpp vs vLLM vs Transformers
-│   └── ai/ses-classifier.md                 SES model's Phase 1-4 plan
+│   ├── architecture/runtime-comparison.md    Ollama vs llama.cpp vs vLLM vs Transformers
+│   ├── architecture/runtime-dependencies.md  Ollama/GPU/env-var/model-download dependency boundary
+│   └── ai/ses-classifier.md                  SES model's Phase 1-4 plan
 ├── llm/src/
 │   ├── schemas/        TaskMetadata, LLMTask (wire format + internal), result types
 │   ├── interfaces/      LLMProvider, LocalModel, typed error hierarchy
@@ -46,8 +59,15 @@ light-one-platform/
 │   ├── deterministic/    rules that must never go through an LLM
 │   ├── router/           LLMRouter (rule-based routing + classify pipeline)
 │   └── evaluator/        confidence clamping / human-review flagging
-├── models/ses/           first domain model: prompt, input formatting, validator
-└── tests/                router / local-model / SES / integration test suites
+├── models/ses/
+│   ├── sesEmail.ts, sesSystemPrompt.ts, sesClassifier.ts   first domain model
+│   └── benchmark/
+│       ├── dataset.ts        56 synthetic emails, >=14 per category, hard cases included
+│       ├── metrics.ts        accuracy/precision/recall/F1/confusion/latency percentiles (pure, unit-tested)
+│       └── runBenchmark.ts   `npm run benchmark:ses` entry point (real Ollama or graceful SKIPPED)
+├── scripts/check-local-ai.sh   CPU/RAM/GPU/VRAM/CUDA/disk/ollama hardware report
+├── Dockerfile, docker-compose.yml, .env.example   future Light One Linux server (llm-platform + ollama + postgres)
+└── tests/                router / local-model / SES / benchmark / integration test suites
 ```
 
 ## Running it
@@ -95,9 +115,61 @@ console.log(result);
 An Automation Engine calls the same flow via the wire-format `LLMTaskRequest`
 (spec section 8) through `parseLLMTaskRequest` + `router.executeClassify`.
 
+## Benchmarking the SES classifier for real
+
+```bash
+ollama pull llama3.1:8b   # or whatever model you point the registry at
+ollama serve
+npm run benchmark:ses
+```
+
+Runs the real pipeline (Router → `ses-classifier` → Ollama → Structured
+Output → Validator → Evaluator) against the 56-example synthetic dataset
+in `models/ses/benchmark/dataset.ts` and prints accuracy / precision /
+recall / F1 / confusion matrix / invalid-JSON rate / latency (avg, p50,
+p95) / per-category accuracy / failure cases / a suggested conclusion. If
+nothing is listening on the configured Ollama endpoint (as in this repo's
+remote sandbox), it prints `SKIPPED: local model unavailable` and exits 0
+— that's the correct, successful outcome here, not a failure.
+
+**Swapping the SES model** — no code change needed either way:
+
+```bash
+# one-off, without touching the registry:
+SES_CLASSIFIER_MODEL=qwen2.5:7b npm run benchmark:ses
+
+# persistent: edit the one line in llm/src/registry/models.json
+#   "runtime": { "kind": "ollama", "model": "qwen2.5:7b" }
+```
+
+## Hardware check
+
+```bash
+bash scripts/check-local-ai.sh
+```
+
+Reports CPU cores/model, RAM, GPU/VRAM/CUDA (or "no NVIDIA GPU detected"),
+disk, and `ollama --version`/`ollama list` — every check degrades to a
+plain "not available" line instead of erroring when a tool is missing, so
+it's safe to run on any box before picking a model size.
+
+## Docker (future Light One Linux server)
+
+```bash
+cp .env.example .env   # optional, defaults work as-is
+docker compose up
+```
+
+Three services (`docker-compose.yml`): `ollama` (model runtime),
+`llm-platform` (this package, runs the benchmark by default), and
+`postgres` (provisioned for a future DB-backed Model Registry — nothing
+reads from it yet). Intentionally minimal — no Kubernetes, no extra
+orchestration, no healthcheck choreography (`OllamaProvider` already
+handles "Ollama isn't ready yet" as a normal `ModelUnavailableError`).
+
 ---
 
-## Final report
+## Final report — Phase 1
 
 ### 1. What was implemented
 
@@ -106,9 +178,8 @@ A first-class **multi-model foundation**: a typed task/result schema, an
 a JSON-backed Model Registry, a rule-based Router that picks a model from
 task metadata, a domain-agnostic Evaluator, and the first real domain
 model — an SES email classifier — running Phase 1 (base model + prompt +
-structured output + validation, no fine-tuning yet). 23 tests cover
-routing rules, `OllamaProvider`'s error handling, the SES classifier, and
-the full task→result pipeline.
+structured output + validation, no fine-tuning yet). See "Final report —
+Phase 2" below for the real-model validation harness built on top of this.
 
 ### 2. File structure
 
@@ -176,10 +247,11 @@ Rule-based, in priority order, evaluated in `LLMRouter.route()`
 ✓ tests/router.test.ts (6 tests)         — the 4 required routing scenarios
                                             plus domain-preference and a
                                             no-eligible-model error case
-✓ tests/sesClassifier.test.ts (4 tests)  — verified/high-confidence path,
+✓ tests/sesClassifier.test.ts (7 tests)  — verified/high-confidence path,
                                             low-confidence → human review,
                                             unknown category → human review,
-                                            always routes through ses-classifier
+                                            always routes through ses-classifier,
+                                            timeout/unavailable/malformed propagation
 ✓ tests/integration.test.ts (4 tests)    — full Task→Router→Model→
                                             Evaluator→Result pipeline,
                                             deterministic short-circuit,
@@ -187,10 +259,12 @@ Rule-based, in priority order, evaluated in `LLMRouter.route()`
                                             propagation
 
 Test Files  4 passed (4)
-     Tests  23 passed (23)
+     Tests  26 passed (26)
 ```
 
-`npm run typecheck` (strict TypeScript) also passes clean.
+`npm run typecheck` (strict TypeScript) also passes clean. See "Final
+report — Phase 2" below for the current full suite (40 tests, 8 files)
+after the benchmark harness and real-environment tests were added.
 
 ### 7. Current constraints
 
@@ -207,7 +281,9 @@ Test Files  4 passed (4)
 - No live end-to-end run against a real Ollama server was performed in
   this sandbox (no GPU/Ollama process available here) — `OllamaProvider`
   is verified against a mocked `fetch`, which exercises the exact HTTP
-  request/response contract Ollama's API documents.
+  request/response contract Ollama's API documents. (Phase 2 below adds a
+  second layer of tests against a genuinely unreachable real endpoint, no
+  mocking, to prove this holds outside of simulation too.)
 - `ses-normalizer`, `insurance-classifier`, and `succession-analyzer` are
   registry entries only (`status: "planned"`) — no prompts or providers
   built for them yet.
@@ -243,3 +319,167 @@ low-effort source of exactly this data once it's running in production.
 5. Decide where Model Registry data should live long-term (`models.json`
    is fine for Phase 1; a DB-backed registry per spec section 5 becomes
    worth it once multiple teams are adding models independently).
+
+---
+
+## Final report — Phase 2 (real-model validation harness)
+
+Goal of this change: make the pipeline **ready to validate against a real
+Ollama model the moment it reaches a machine that can reach one** —
+without pretending a benchmark happened here. No fine-tuning, no network
+workarounds, no code changes beyond what's needed for that readiness.
+
+### 1. Changed files
+
+New: `docs/architecture/runtime-dependencies.md`,
+`models/ses/benchmark/{dataset,metrics,runBenchmark}.ts`,
+`scripts/check-local-ai.sh`, `Dockerfile`, `docker-compose.yml`,
+`.env.example`, `tests/{ollamaProviderReal,sesBenchmarkDataset,benchmarkMetrics,benchmarkRunnerSkip}.test.ts`.
+Modified: `tests/sesClassifier.test.ts` (added timeout/unavailable/malformed
+propagation cases), `package.json` (added `tsx` dev dep + `benchmark:ses`
+script), `README.md`. **`llm/` core (Router/Registry/Providers/Evaluator)
+was not touched** — Phase 1's adapter boundaries already supported
+everything this phase needed.
+
+### 2. What was implemented
+
+- **Dependency separation** (`docs/architecture/runtime-dependencies.md`):
+  written analysis confirming Ollama/model-download/GPU/env-var/provider-config
+  boundaries were already correctly isolated to `OllamaProvider` in Phase 1 —
+  no code needed to change for this, it's documentation of an existing property.
+- **Real (unmocked) error-handling proof** (`tests/ollamaProviderReal.test.ts`):
+  hits a genuinely unreachable `http://127.0.0.1:11434` — no `fetch` mock —
+  and confirms `classify()`/`generate()`/`isAvailable()` degrade to
+  `ModelUnavailableError`/`false` instead of an unhandled exception.
+- **Stronger Mock-based SES tests** (`tests/sesClassifier.test.ts`): timeout,
+  unavailable, and malformed-JSON scenarios now propagate correctly through
+  `classifySesEmail`, not just the generic Router.
+- **56-example synthetic SES dataset** (`models/ses/benchmark/dataset.ts`,
+  14 per category), including every hard case the spec asked for: mixed
+  project/sales signal, an engineer profile written as a sales pitch,
+  subject-alone-insufficient, sparse SES vocabulary, informal/broken
+  Japanese, HTML-leftover noise, a long signature block, a forwarded
+  email, and a multi-project digest. Verified by
+  `tests/sesBenchmarkDataset.test.ts` (count/uniqueness/shape).
+- **Benchmark metrics module** (`models/ses/benchmark/metrics.ts`): pure,
+  dependency-free accuracy/precision/recall/F1/confusion-matrix/invalid-JSON-rate/
+  latency-percentile computation, plus a documented (not silently
+  hardcoded) provisional pass/fail heuristic. Fully unit-tested
+  (`tests/benchmarkMetrics.test.ts`) with hand-computed expected values —
+  this is real, verified math, independent of whether any LLM is available.
+- **Benchmark runner** (`models/ses/benchmark/runBenchmark.ts`,
+  `npm run benchmark:ses`): runs the real
+  Router→ses-classifier→Ollama→Validator→Evaluator pipeline against the
+  dataset and prints the exact report format the spec asked for
+  (Model/Parameters/Quantization/Runtime/Hardware/Dataset/Total
+  samples/Accuracy/Precision/Recall/F1/Invalid JSON/latency
+  avg-p50-p95/per-category accuracy/Failure cases/Conclusion). Prints
+  `SKIPPED: local model unavailable` and exits 0 when Ollama isn't
+  reachable — proven for real in this sandbox
+  (`tests/benchmarkRunnerSkip.test.ts` runs the actual script as a child
+  process).
+- **Model swap convenience**: `SES_CLASSIFIER_MODEL` env var (runner-only)
+  plus the pre-existing `models.json`-as-source-of-truth design — no model
+  name is hardcoded anywhere in `llm/` or `models/`.
+- **Docker scaffolding** (`Dockerfile`, `docker-compose.yml`, `.env.example`):
+  minimal `llm-platform` + `ollama` + `postgres` compose file for the
+  target Linux server, deliberately not more than that.
+- **Hardware detection** (`scripts/check-local-ai.sh`): CPU/RAM/GPU/VRAM/CUDA/disk/ollama
+  report with graceful fallbacks; already run in this sandbox (see below).
+
+### 3. Test results
+
+```
+✓ tests/benchmarkMetrics.test.ts (6 tests)
+✓ tests/localModel.test.ts (9 tests)
+✓ tests/sesClassifier.test.ts (7 tests)
+✓ tests/router.test.ts (6 tests)
+✓ tests/integration.test.ts (4 tests)
+✓ tests/ollamaProviderReal.test.ts (3 tests)     — real, unmocked, against a genuinely absent Ollama
+✓ tests/sesBenchmarkDataset.test.ts (4 tests)
+✓ tests/benchmarkRunnerSkip.test.ts (1 test)     — runs the actual benchmark:ses script as a child process
+
+Test Files  8 passed (8)
+     Tests  40 passed (40)
+```
+
+`npm run typecheck` passes clean. `npm run benchmark:ses` run directly in
+this sandbox (not just via the test) printed:
+
+```
+SKIPPED: local model unavailable
+  endpoint tried: http://localhost:11434
+  model tried:    llama3.1:8b
+  (start Ollama with `ollama serve` and `ollama pull <model>`, or set OLLAMA_HOST / SES_CLASSIFIER_MODEL)
+```
+
+exit code `0`, as designed. `scripts/check-local-ai.sh` was also run for
+real in this sandbox: 4 CPU cores (Intel Xeon @2.80GHz), 15GB RAM, no
+NVIDIA GPU, 30GB free disk, `ollama` not on `PATH` — consistent with "no
+Ollama here" and useful as-is for sizing a model choice on any other box.
+
+### 4. How to use the Benchmark Runner
+
+```bash
+ollama pull llama3.1:8b   # or another model — see "Swapping the SES model"
+ollama serve
+cd light-one-platform
+npm install
+npm run benchmark:ses
+```
+
+Optional: `SES_CLASSIFIER_MODEL=<tag> npm run benchmark:ses` to try a
+different model without editing the registry; `OLLAMA_HOST=<url>` to point
+at a non-default Ollama endpoint (e.g. the `docker-compose.yml` service
+name `http://ollama:11434`). See "Benchmarking the SES classifier for
+real" above for full usage and what the report contains.
+
+### 5. Work needed on the real machine
+
+1. Install Ollama and confirm with `scripts/check-local-ai.sh`.
+2. `ollama pull llama3.1:8b` (or another model chosen from
+   `docs/architecture/runtime-comparison.md`'s guidance + the real
+   hardware report).
+3. `ollama serve` (or run via `docker compose up`).
+4. `npm run benchmark:ses` and read the printed report.
+5. Based on the real Accuracy/F1/per-category numbers: if the local model
+   clears the bar, ship it as-is; if not, note which categories are weak
+   (the report names them) and decide whether prompt iteration, few-shot
+   examples, or Phase 3 fine-tuning is the right next step — this decision
+   is exactly what Phase 1's spec deferred to "after a real benchmark
+   exists," which is now possible.
+
+### 6. Why this couldn't run in the remote environment
+
+This session's only available environment
+(`env_017wCdsCYNsdm7MwwUR3CpFy`, "Default — trusted network access") is a
+`policy-enforcing egress proxy` allowlisting only a small fixed set of
+hosts (`registry.npmjs.org`, `pypi.org`, `api.anthropic.com`, and a few
+others — see the proxy's own `/root/.ccr/README.md`). Both `ollama.com`
+(the Ollama installer/model registry) and `huggingface.co` (an alternate
+model source) returned an explicit `403` **policy denial**, not a timeout
+or a missing-package error — confirmed via `recentRelayFailures` in the
+proxy's status endpoint. The proxy's own documentation says such denials
+should be reported, not retried or routed around, so no further attempts
+(alternate mirrors, apt, pip-bundled weights, etc.) were made. This is not
+a repo bug — it is a deliberate property of this specific development
+sandbox, and does not apply to Light One's actual Linux server.
+
+### 7. Phase 3 candidates
+
+1. Run `npm run benchmark:ses` for real on the Light One Linux server and
+   commit the actual report (accuracy/F1/latency/failure cases) — this is
+   the prerequisite for every decision below, not something to guess at.
+2. Based on that report: decide prompt-only vs. few-shot vs. fine-tuning
+   per spec Step 9 — driven by the measured weak categories, not assumed
+   ones.
+3. If fine-tuning is warranted, start Phase 2 data collection for real
+   (see `docs/ai/ses-classifier.md`) — the synthetic dataset here is a
+   benchmark harness input, not a fine-tuning training set.
+4. Decide the actual local-vs-API-fallback threshold from real confidence/
+   accuracy correlation data (spec Step 6) — `suggestConclusion()`'s
+   thresholds in `metrics.ts` are explicitly provisional and documented as
+   such; replace them once real numbers exist.
+5. Run the same dataset against Gemini/GPT/Claude for a handful of
+   samples (spec Step 7) to measure how much headroom an API fallback
+   would actually buy, without burning API budget on the full 56.
