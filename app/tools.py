@@ -10,6 +10,35 @@ def get_sales_summary() -> str:
     return "売上ツールは準備中です"
 
 
+def register_project(
+    skills: list | None = None,
+    location: str | None = None,
+    budget_min: int | None = None,
+    budget_max: int | None = None,
+    start_date: str | None = None,
+    experience_years: int | None = None,
+) -> str:
+    # No DB yet (spec: not this round) — just accept the structured data
+    # Planner already extracted and echo it back, shaped so a later DB
+    # write can take this "project" dict as-is.
+    project = {
+        "skills": skills or [],
+        "location": location,
+        "budget_min": budget_min,
+        "budget_max": budget_max,
+        "start_date": start_date,
+        "experience_years": experience_years,
+    }
+
+    return json.dumps(
+        {
+            "message": "案件登録を受け付けました",
+            "project": project,
+        },
+        ensure_ascii=False,
+    )
+
+
 def search_jobs(keyword: str = "") -> str:
     with open("data/jobs.json", "r", encoding="utf-8") as f:
         jobs = json.load(f)
