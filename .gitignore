@@ -2,6 +2,11 @@
 __pycache__/
 *.pyc
 
-# Gmail OAuth secrets — never commit these (spec: keep credentials out of Git)
+# Gmail OAuth secrets — never commit these (spec: keep credentials out of Git).
+# credentials.json/token.json are the Engine's standard; client_secret.json/
+# token.pickle are listed defensively in case an old-named file ever ends up
+# in this directory — the code itself only ever reads the two above.
 credentials.json
+client_secret.json
 token.json
+token.pickle

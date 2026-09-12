@@ -1,6 +1,8 @@
-"""Minimal Gmail API client (spec: fetch one email and return it as
-structured data — no Planner/Router/Executor connection yet, that's the
-next step; no project-email filtering yet either).
+"""Gmail API client, decomposed into reusable operations (spec: no
+Planner/Router/Executor connection yet — these are internal building
+blocks for a future self-contained Gmail Tool, not Registry entries
+themselves, since Executor only ever calls `tool(**parameters)` and a
+`service`/`creds` object can never come from Task.parameters).
 
 OAuth ("installed app" flow via google-auth-oauthlib):
 
@@ -34,8 +36,13 @@ SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 CREDENTIALS_PATH = os.environ.get("GMAIL_CREDENTIALS_PATH", "credentials.json")
 TOKEN_PATH = os.environ.get("GMAIL_TOKEN_PATH", "token.json")
 
+GMAIL_USER_ID = "me"
 
-def _get_credentials() -> Credentials:
+
+def authenticate() -> Credentials:
+    """OAuth entry point: returns valid Credentials, refreshing or
+    running the browser consent flow as needed, and caching the result
+    to TOKEN_PATH (token.json) either way."""
     creds = None
     if os.path.exists(TOKEN_PATH):
         creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
@@ -53,9 +60,82 @@ def _get_credentials() -> Credentials:
     return creds
 
 
-def _get_gmail_service():
-    creds = _get_credentials()
+def get_gmail_service(creds: Credentials):
     return build("gmail", "v1", credentials=creds)
+
+
+def list_messages(service, max_results: int = 100, query: str | None = None) -> list[dict[str, Any]]:
+    """Lists message id/threadId pairs (not full messages — call
+    get_message() per id for details). No pagination beyond a single
+    page (spec: large-scale pagination is out of scope this round)."""
+    request = service.users().messages().list(
+        userId=GMAIL_USER_ID,
+        maxResults=max_results,
+        **({"q": query} if query else {}),
+    )
+    results = request.execute()
+    return results.get("messages", [])
+
+
+def get_message(service, message_id: str) -> dict[str, Any]:
+    return (
+        service.users()
+        .messages()
+        .get(userId=GMAIL_USER_ID, id=message_id, format="full")
+        .execute()
+    )
+
+
+def search_messages(service, query: str, max_results: int = 100) -> list[dict[str, Any]]:
+    """Thin wrapper over list_messages() — same call, just always with a
+    query, so Gmail search syntax (e.g. "from:agency@example.com") is the
+    whole interface."""
+    return list_messages(service, max_results=max_results, query=query)
+
+
+def _decode_body_data(data: str) -> bytes:
+    padded = data + "=" * (-len(data) % 4)
+    return base64.urlsafe_b64decode(padded)
+
+
+def get_attachments(service, message: dict[str, Any]) -> list[dict[str, Any]]:
+    """Walks the message payload for parts that are stored attachments
+    (a body.attachmentId with no inline data — that's how Gmail marks
+    "fetch this separately") and downloads each via attachments.get().
+    Returns [] if there are none. Doesn't write anything to disk."""
+    message_id = message.get("id")
+    payload = message.get("payload", {})
+
+    attachments = []
+    stack = list(payload.get("parts") or [])
+
+    while stack:
+        part = stack.pop()
+        stack.extend(part.get("parts") or [])
+
+        attachment_id = part.get("body", {}).get("attachmentId")
+        filename = part.get("filename")
+        if not attachment_id or not filename:
+            continue
+
+        attachment = (
+            service.users()
+            .messages()
+            .attachments()
+            .get(userId=GMAIL_USER_ID, messageId=message_id, id=attachment_id)
+            .execute()
+        )
+
+        attachments.append(
+            {
+                "filename": filename,
+                "mime_type": part.get("mimeType"),
+                "attachment_id": attachment_id,
+                "data": _decode_body_data(attachment["data"]),
+            }
+        )
+
+    return attachments
 
 
 def _get_header(headers: list[dict[str, str]], name: str) -> str | None:
@@ -65,9 +145,8 @@ def _get_header(headers: list[dict[str, str]], name: str) -> str | None:
     return None
 
 
-def _decode_body_data(data: str) -> str:
-    padded = data + "=" * (-len(data) % 4)
-    return base64.urlsafe_b64decode(padded).decode("utf-8", errors="replace")
+def _decode_body_text(data: str) -> str:
+    return _decode_body_data(data).decode("utf-8", errors="replace")
 
 
 def _strip_html(html: str) -> str:
@@ -89,13 +168,13 @@ def _extract_body(payload: dict[str, Any]) -> str:
     body_data = payload.get("body", {}).get("data")
 
     if body_data and mime_type == "text/plain":
-        return _decode_body_data(body_data)
+        return _decode_body_text(body_data)
 
     parts = payload.get("parts") or []
 
     for part in parts:
         if part.get("mimeType") == "text/plain" and part.get("body", {}).get("data"):
-            return _decode_body_data(part["body"]["data"])
+            return _decode_body_text(part["body"]["data"])
 
     for part in parts:
         if part.get("parts"):
@@ -105,13 +184,13 @@ def _extract_body(payload: dict[str, Any]) -> str:
 
     for part in parts:
         if part.get("mimeType") == "text/html" and part.get("body", {}).get("data"):
-            return _strip_html(_decode_body_data(part["body"]["data"]))
+            return _strip_html(_decode_body_text(part["body"]["data"]))
 
     if body_data and mime_type == "text/html":
-        return _strip_html(_decode_body_data(body_data))
+        return _strip_html(_decode_body_text(body_data))
 
     if body_data:
-        return _decode_body_data(body_data)
+        return _decode_body_text(body_data)
 
     return ""
 
@@ -133,22 +212,17 @@ def parse_message(message: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_latest_email() -> dict[str, Any] | None:
-    """Fetches the single most recent message in the mailbox. No search
-    query/filtering yet — "give me the newest message" is the whole
-    scope this round."""
-    service = _get_gmail_service()
+    """Fetches the single most recent message in the mailbox, structured
+    via parse_message(). No search query/filtering — "give me the
+    newest message" is the whole scope this round."""
+    creds = authenticate()
+    service = get_gmail_service(creds)
 
-    listing = service.users().messages().list(userId="me", maxResults=1).execute()
-    messages = listing.get("messages", [])
+    messages = list_messages(service, max_results=1)
     if not messages:
         return None
 
-    message = (
-        service.users()
-        .messages()
-        .get(userId="me", id=messages[0]["id"], format="full")
-        .execute()
-    )
+    message = get_message(service, messages[0]["id"])
     return parse_message(message)
 
 
