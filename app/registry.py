@@ -4,6 +4,7 @@ from app.tools import (
     search_jobs,
     match_engineers,
     register_project,
+    get_latest_email,
 )
 
 
@@ -15,6 +16,7 @@ class ToolRegistry:
             "job_search_tool": search_jobs,
             "engineer_match_tool": match_engineers,
             "project_register_tool": register_project,
+            "gmail_get_latest_email": get_latest_email,
         }
 
     def get(self, tool_name: str):

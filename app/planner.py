@@ -91,6 +91,13 @@ class Planner:
                 parameters={},
             )
 
+        if "最新のメール" in user_input or "メールを取得" in user_input:
+            return Task(
+                instruction=user_input,
+                tool="メール取得",
+                parameters={},
+            )
+
         if "合う要員" in user_input or "要員を探して" in user_input:
             match = re.search(r"JOB\d+", user_input.upper())
             job_id = match.group(0) if match else ""

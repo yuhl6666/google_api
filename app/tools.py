@@ -1,6 +1,8 @@
 import json
 from datetime import datetime
 
+from app import gmail_client
+
 
 def get_current_time() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -8,6 +10,16 @@ def get_current_time() -> str:
 
 def get_sales_summary() -> str:
     return "売上ツールは準備中です"
+
+
+def get_latest_email() -> str:
+    # gmail_client.get_latest_email() already does everything (OAuth,
+    # service, list+get+parse) and returns a dict/None — this just turns
+    # that into the str every registered Tool must return. "No mail" is
+    # not an error (same convention as e.g. an empty match_engineers
+    # result): it's a normal, successful outcome with a null payload.
+    email = gmail_client.get_latest_email()
+    return json.dumps({"email": email}, ensure_ascii=False)
 
 
 def register_project(
