@@ -1,5 +1,6 @@
 from app.tools import (
     get_current_time,
+    get_sales_summary,
     search_jobs,
     match_engineers,
 )
@@ -9,6 +10,7 @@ class ToolRegistry:
     def __init__(self):
         self.tools = {
             "current_time_tool": get_current_time,
+            "sales_tool": get_sales_summary,
             "job_search_tool": search_jobs,
             "engineer_match_tool": match_engineers,
         }

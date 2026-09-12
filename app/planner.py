@@ -8,6 +8,10 @@ class Task:
     instruction: str
     tool: str
     parameters: dict[str, Any] = field(default_factory=dict)
+    status: str = "pending"
+    output: Any = None
+    error: str | None = None
+    retry_count: int = 0
 
 
 class Planner:

@@ -1,15 +1,45 @@
-from app.tools import get_current_time
+import json
+from dataclasses import dataclass
+from typing import Any
 
 
-class ToolExecutor:
-    def execute(self, tool_name: str, instruction: str) -> str:
-        if tool_name == "current_time_tool":
-            return get_current_time()
+@dataclass
+class EvaluationResult:
+    success: bool
+    output: Any = None
+    error: str | None = None
 
-        if tool_name == "sales_tool":
-            return f"売上確認を実行しました: {instruction}"
 
-        if tool_name == "job_search_tool":
-            return f"案件検索を実行しました: {instruction}"
+class Evaluator:
+    """Judges whether an Executor result counts as success or failure.
 
-        return "Unknown tool"
+    Deliberately separate from ToolExecutor: the Executor's job is to run a
+    tool and hand back whatever it returned, the Evaluator's job is to
+    decide if that counts as success. Only knows the Executor's own result
+    conventions ("Unknown tool", or a JSON string with an "error" key) —
+    nothing tool-specific.
+    """
+
+    def evaluate(self, result: str | None) -> EvaluationResult:
+        if result is None:
+            return EvaluationResult(success=False, error="No result returned")
+
+        if result == "Unknown tool":
+            return EvaluationResult(success=False, error=result)
+
+        json_error = self._extract_json_error(result)
+        if json_error is not None:
+            return EvaluationResult(success=False, error=json_error)
+
+        return EvaluationResult(success=True, output=result)
+
+    @staticmethod
+    def _extract_json_error(result: str) -> str | None:
+        try:
+            parsed = json.loads(result)
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+        if isinstance(parsed, dict) and "error" in parsed:
+            return str(parsed["error"])
+        return None

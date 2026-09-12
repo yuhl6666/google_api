@@ -6,6 +6,10 @@ def get_current_time() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def get_sales_summary() -> str:
+    return "売上ツールは準備中です"
+
+
 def search_jobs(keyword: str = "") -> str:
     with open("data/jobs.json", "r", encoding="utf-8") as f:
         jobs = json.load(f)
