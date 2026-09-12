@@ -1,3 +1,7 @@
 .venv/
 __pycache__/
 *.pyc
+
+# Gmail OAuth secrets — never commit these (spec: keep credentials out of Git)
+credentials.json
+token.json
