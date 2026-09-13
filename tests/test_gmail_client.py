@@ -292,6 +292,75 @@ def test_parse_message_html_only_falls_back_to_stripped_text():
     assert "<" not in result["body"]
 
 
+def test_parse_message_falls_through_to_html_when_plain_is_a_view_in_browser_filler():
+    message = {
+        "id": "msg-002b",
+        "payload": {
+            "mimeType": "multipart/alternative",
+            "headers": _headers("sender@example.com", "案件のご紹介", "Tue, 2 Sep 2026 10:00:00 +0900"),
+            "parts": [
+                {
+                    "mimeType": "text/plain",
+                    "body": {"data": _b64(
+                        "メールがうまく表示されない方はこちらをご覧ください\r\nhttps://example.com/view"
+                    )},
+                },
+                {"mimeType": "text/html", "body": {"data": _b64("<p>Go/PHP案件です。単価100万円。</p>")}},
+            ],
+        },
+    }
+
+    result = parse_message(message)
+
+    assert result["body"] == "Go/PHP案件です。単価100万円。"
+
+
+def test_parse_message_uses_plain_fallback_text_when_no_html_alternative_exists():
+    message = {
+        "id": "msg-002c",
+        "payload": {
+            "mimeType": "multipart/alternative",
+            "headers": _headers("sender@example.com", "案件のご紹介", "Tue, 2 Sep 2026 10:00:00 +0900"),
+            "parts": [
+                {
+                    "mimeType": "text/plain",
+                    "body": {"data": _b64(
+                        "メールがうまく表示されない方はこちらをご覧ください\r\nhttps://example.com/view"
+                    )},
+                },
+            ],
+        },
+    }
+
+    result = parse_message(message)
+
+    assert "メールがうまく表示されない" in result["body"]
+
+
+def test_parse_message_strips_style_and_script_block_contents_not_just_tags():
+    message = {
+        "id": "msg-003b",
+        "payload": {
+            "mimeType": "multipart/alternative",
+            "headers": _headers("sender@example.com", "HTML案件メール", "Wed, 3 Sep 2026 11:00:00 +0900"),
+            "parts": [
+                {
+                    "mimeType": "text/html",
+                    "body": {"data": _b64(
+                        "<style>body{color:red}</style>"
+                        "<script>track();</script>"
+                        "<div><p>Java案件です。</p></div>"
+                    )},
+                },
+            ],
+        },
+    }
+
+    result = parse_message(message)
+
+    assert result["body"] == "Java案件です。"
+
+
 def test_parse_message_handles_nested_multipart():
     message = {
         "id": "msg-004",

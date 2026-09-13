@@ -152,9 +152,27 @@ def _decode_body_text(data: str) -> str:
 def _strip_html(html: str) -> str:
     # Deliberately minimal — not a real HTML parser (spec: no advanced
     # HTML parsing this round). Good enough to get readable text out of a
-    # text/html-only email.
-    text = re.sub(r"<[^>]+>", " ", html)
+    # text/html-only email. <style>/<script> blocks are dropped whole
+    # first (not just their tags) so their contents — CSS rules, JS —
+    # don't leak into the "text" as noise.
+    text = re.sub(r"(?is)<(style|script)\b[^>]*>.*?</\1>", " ", html)
+    text = re.sub(r"<[^>]+>", " ", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+# Phrases ASPs commonly send as the text/plain part of a multipart/alternative
+# mail whose real content is only in text/html ("view this in your browser"
+# filler) — not real message content, so a part matching one of these should
+# be treated as if it were absent rather than returned as the body.
+_PLAIN_FALLBACK_PATTERNS = (
+    "メールがうまく表示されない",
+    "正しく表示されない場合",
+    "うまく表示されない場合",
+)
+
+
+def _is_plain_fallback(text: str) -> bool:
+    return any(pattern in text for pattern in _PLAIN_FALLBACK_PATTERNS)
 
 
 def _extract_body(payload: dict[str, Any]) -> str:
@@ -163,18 +181,33 @@ def _extract_body(payload: dict[str, Any]) -> str:
     multipart/alternative with both text/plain and text/html parts, and
     one level of nesting (e.g. multipart/alternative inside
     multipart/mixed, which is what a plain-text-or-HTML email with an
-    attachment looks like)."""
+    attachment looks like).
+
+    A text/plain part that is only a known "view in browser" filler (see
+    _PLAIN_FALLBACK_PATTERNS) is treated as if absent, so the text/html
+    alternative's real content is used instead — but kept as a
+    last-resort return in case no html turns up anywhere."""
     mime_type = payload.get("mimeType", "")
     body_data = payload.get("body", {}).get("data")
 
+    plain_fallback = None
+
     if body_data and mime_type == "text/plain":
-        return _decode_body_text(body_data)
+        text = _decode_body_text(body_data)
+        if _is_plain_fallback(text):
+            plain_fallback = text
+        else:
+            return text
 
     parts = payload.get("parts") or []
 
     for part in parts:
         if part.get("mimeType") == "text/plain" and part.get("body", {}).get("data"):
-            return _decode_body_text(part["body"]["data"])
+            text = _decode_body_text(part["body"]["data"])
+            if _is_plain_fallback(text):
+                plain_fallback = plain_fallback or text
+            else:
+                return text
 
     for part in parts:
         if part.get("parts"):
@@ -188,6 +221,9 @@ def _extract_body(payload: dict[str, Any]) -> str:
 
     if body_data and mime_type == "text/html":
         return _strip_html(_decode_body_text(body_data))
+
+    if plain_fallback is not None:
+        return plain_fallback
 
     if body_data:
         return _decode_body_text(body_data)
