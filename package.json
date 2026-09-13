@@ -1,0 +1,20 @@
+{
+  "name": "light-one-llm-platform",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Light One's shared LLM Router + Local Model foundation (llm/) and its first domain model (models/ses).",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -b",
+    "benchmark:ses": "tsx models/ses/benchmark/runBenchmark.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "tsx": "^4.19.1",
+    "typescript": "^5.5.3",
+    "vitest": "^2.1.9"
+  }
+}
