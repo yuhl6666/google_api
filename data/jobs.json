@@ -1,0 +1,23 @@
+[
+    {
+      "id": "JOB001",
+      "title": "Pythonバックエンド開発",
+      "skills": ["Python", "AWS"],
+      "location": "リモート",
+      "budget": 700000
+    },
+    {
+      "id": "JOB002",
+      "title": "Java開発支援",
+      "skills": ["Java", "Spring"],
+      "location": "東京",
+      "budget": 650000
+    },
+    {
+      "id": "JOB003",
+      "title": "AI開発支援",
+      "skills": ["Python", "PyTorch"],
+      "location": "リモート",
+      "budget": 900000
+    }
+  ]
