@@ -22,6 +22,33 @@ API、UIは未実装）。
     Scoring Engineの入力型へ変換する。
   - `npm test` で18件のテスト(validationの正常系/異常系 + Scoring Engineへの
     実際の受け渡し確認)が通ることを確認済み。
+- `src/matching/` — 1案件に対する複数要員の候補ランキング。
+  - `matchProjectToEngineers(project, engineers)`: `ProjectRecord`と
+    `EngineerRecord[]`を受け取り、各要員を`toProjectInput`/`toEngineerInput`で
+    変換した上でScoring Engineの`calcTotalScore`にそのまま委譲してスコアを求め、
+    `{ engineerId, score }`の配列をスコア降順で返す。スコア計算式は一切持たず、
+    複数要員の処理・`engineerId`の付与・並べ替えのみを行う薄い層。
+  - project/engineersは呼び出し側で`validateProjectRecord`/`validateEngineerRecord`
+    を通過済みであることを前提とし、この層ではvalidationを行わない。
+  - 同点の場合はJavaScriptの安定ソートにより、渡した`engineers`配列内の順序を
+    維持する(決定論的)。`engineers`が空配列なら空配列を返す。
+  - `npm test` で8件のテスト(降順・同点順序・空配列・Scoring Engineとの結果一致等)
+    が通ることを確認済み。
+
+処理フローの全体像:
+
+```
+ProjectRecord / EngineerRecord[]
+        ↓ (呼び出し側が事前に実施)
+  validateProjectRecord / validateEngineerRecord
+        ↓
+  matchProjectToEngineers()
+        ├─ toProjectInput / toEngineerInput
+        └─ calcTotalScore (Scoring Engine)
+        ↓
+  スコア降順のcandidate一覧 [{ engineerId, score }, ...]
+```
+
 - 未実装: 案件/要員データの永続化(DB)、REST/GraphQL等のAPI、マッチング結果の
   提示UI、営業/担当者による確認フロー、CSV/Gmail等からの実際の取り込み処理、
   フィードバックによる重み自動学習(`weightLearning`は移植済みだがまだどこからも
