@@ -94,7 +94,15 @@ def main():
         run_gmail_intake_cli()
         return
 
-    user_input = input("User: ")
+    if len(sys.argv) > 1:
+        # `python -m app.main <instruction>` — same run_task()/print path as
+        # interactive mode, just skipping the input() prompt so a natural
+        # language instruction can be passed directly (e.g. from a shell
+        # script or another Tool), no separate implementation.
+        user_input = " ".join(sys.argv[1:])
+    else:
+        user_input = input("User: ")
+
     task, routed_tool = run_task(user_input)
     _print_task_result(task, routed_tool)
 
