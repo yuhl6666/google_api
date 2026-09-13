@@ -1,0 +1,61 @@
+from app.planner import Planner
+
+
+def test_full_project_email_is_parsed_into_all_fields():
+    email = (
+        "Python/AWS案件です。リモート可。単価70〜80万円。"
+        "9月開始。Python経験3年以上希望。"
+    )
+
+    task = Planner().plan(email)
+
+    assert task.tool == "案件登録"
+    assert task.parameters == {
+        "skills": ["Python", "AWS"],
+        "location": "リモート",
+        "budget_min": 700_000,
+        "budget_max": 800_000,
+        "start_date": "2026-09",
+        "experience_years": 3,
+    }
+
+
+def test_partial_project_email_leaves_missing_fields_as_none():
+    # No location, no start date, no experience-year mention.
+    email = "Python案件です。単価70万円。"
+
+    task = Planner().plan(email)
+
+    assert task.tool == "案件登録"
+    assert task.parameters["skills"] == ["Python"]
+    assert task.parameters["location"] is None
+    assert task.parameters["budget_min"] == 700_000
+    assert task.parameters["budget_max"] == 700_000
+    assert task.parameters["start_date"] is None
+    assert task.parameters["experience_years"] is None
+
+
+def test_different_skill_set_is_not_hardcoded_to_python_aws():
+    email = (
+        "Java/Spring案件です。東京勤務。単価60〜65万円。"
+        "10月開始。経験5年以上希望。"
+    )
+
+    task = Planner().plan(email)
+
+    assert task.tool == "案件登録"
+    assert task.parameters["skills"] == ["Java", "Spring"]
+    assert task.parameters["location"] == "東京"
+    assert task.parameters["budget_min"] == 600_000
+    assert task.parameters["budget_max"] == 650_000
+    assert task.parameters["start_date"] == "2026-10"
+    assert task.parameters["experience_years"] == 5
+
+
+def test_project_search_query_is_still_routed_as_job_search_not_registration():
+    # Regression guard: a plain search query must not be swept into the
+    # new 案件登録 branch just because it contains "案件".
+    task = Planner().plan("Python案件を探して")
+
+    assert task.tool == "案件検索"
+    assert task.parameters == {"keyword": "Python"}
