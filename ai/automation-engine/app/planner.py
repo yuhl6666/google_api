@@ -84,6 +84,27 @@ class Planner:
                 parameters={},
             )
 
+        if "案件" in user_input and ("単価" in user_input or "万円" in user_input):
+            # A job-posting email (has rate info), not a search query like
+            # "Python案件を探して" — those never mention 単価/万円. Checked
+            # before 時刻/時間 below: a posting's body commonly contains
+            # "就業時間" etc., whose "時間" substring would otherwise steal
+            # the route before this more specific match gets a chance.
+            budget_min, budget_max = _extract_budget(user_input)
+
+            return Task(
+                instruction=user_input,
+                tool="案件登録",
+                parameters={
+                    "skills": _extract_skills(user_input),
+                    "location": _extract_location(user_input),
+                    "budget_min": budget_min,
+                    "budget_max": budget_max,
+                    "start_date": _extract_start_date(user_input),
+                    "experience_years": _extract_experience_years(user_input),
+                },
+            )
+
         if "時刻" in user_input or "時間" in user_input:
             return Task(
                 instruction=user_input,
@@ -107,24 +128,6 @@ class Planner:
                 tool="要員マッチング",
                 parameters={
                     "job_id": job_id,
-                },
-            )
-
-        if "案件" in user_input and ("単価" in user_input or "万円" in user_input):
-            # A job-posting email (has rate info), not a search query like
-            # "Python案件を探して" — those never mention 単価/万円.
-            budget_min, budget_max = _extract_budget(user_input)
-
-            return Task(
-                instruction=user_input,
-                tool="案件登録",
-                parameters={
-                    "skills": _extract_skills(user_input),
-                    "location": _extract_location(user_input),
-                    "budget_min": budget_min,
-                    "budget_max": budget_max,
-                    "start_date": _extract_start_date(user_input),
-                    "experience_years": _extract_experience_years(user_input),
                 },
             )
 

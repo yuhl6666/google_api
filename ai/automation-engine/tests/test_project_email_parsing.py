@@ -52,6 +52,20 @@ def test_different_skill_set_is_not_hardcoded_to_python_aws():
     assert task.parameters["experience_years"] == 5
 
 
+def test_project_email_with_業務時間_wording_is_still_routed_to_registration():
+    # Regression guard: "就業時間" contains the substring "時間", which
+    # must not steal the route to 現在時刻 before 案件登録 gets a chance.
+    email = (
+        "Go/PHP案件です。リモート勤務。◆就業時間：10:00~19:00。"
+        "◆金額：単価100万円以上。"
+    )
+
+    task = Planner().plan(email)
+
+    assert task.tool == "案件登録"
+    assert task.parameters["budget_min"] == 1_000_000
+
+
 def test_project_search_query_is_still_routed_as_job_search_not_registration():
     # Regression guard: a plain search query must not be swept into the
     # new 案件登録 branch just because it contains "案件".
