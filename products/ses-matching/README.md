@@ -12,9 +12,20 @@ API、UIは未実装）。
   - [`legacy/ses-matching-reference/web/src/scoring/`](../../legacy/ses-matching-reference/web/src/scoring/)
     のロジックとテスト(41件)を、Firebase/React依存部分を含めずそのまま移植したもの。
   - `npm test` で41件のテストが通ることを確認済み。
-- 未実装: 案件/要員データの取り込み・永続化(DB)、マッチング結果の提示UI、
-  営業/担当者による確認フロー、フィードバックによる重み自動学習(`weightLearning`は
-  移植済みだがまだどこからも呼び出されていない)。
+- `src/intake/` — 外部から受け取る案件・要員データの入力型と最小validation。
+  - `ProjectRecord` / `EngineerRecord`: Scoring Engineの`ProjectInput`/`EngineerInput`に
+    `id`(識別用)を加えただけの入力型。DB/API/CSV等どこから来たデータかは問わない。
+  - `validateProjectRecord` / `validateEngineerRecord`: 必須項目の存在・型・
+    明らかに不正な値(負の単価、単価レンジの逆転、不正な日付、未知のjapaneseLevel等)
+    のみを検査する。SES固有の複雑な業務ルールはまだ実装していない。
+  - `toProjectInput` / `toEngineerInput`: 検証済みRecordから`id`を除いて
+    Scoring Engineの入力型へ変換する。
+  - `npm test` で18件のテスト(validationの正常系/異常系 + Scoring Engineへの
+    実際の受け渡し確認)が通ることを確認済み。
+- 未実装: 案件/要員データの永続化(DB)、REST/GraphQL等のAPI、マッチング結果の
+  提示UI、営業/担当者による確認フロー、CSV/Gmail等からの実際の取り込み処理、
+  フィードバックによる重み自動学習(`weightLearning`は移植済みだがまだどこからも
+  呼び出されていない)。
 
 ## 位置付け
 
