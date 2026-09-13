@@ -1,0 +1,15 @@
+node_modules/
+functions/lib/
+functions/firebase-debug.log
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
+.firebase/
+web/dist/
+web/.env
+web/.env.local
+web/*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts
+*.local
