@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Role } from '../types';
 
 interface AuthContextValue {
@@ -26,6 +26,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Supabase not configured yet: skip all auth wiring so the app can still
+    // boot and render (e.g. the login page) instead of hanging in "loading".
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      return;
+    }
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setUser(session?.user ?? null);
       setRole(session?.user ? await fetchRole(session.user.id) : null);
@@ -43,6 +50,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function signUp(email: string, password: string, newRole: Role) {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabaseが設定されていないため、この操作は実行できません。');
+    }
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) throw error;
     if (!data.user) {
@@ -56,11 +66,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signIn(email: string, password: string) {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabaseが設定されていないため、この操作は実行できません。');
+    }
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
   }
 
   async function signOut() {
+    if (!isSupabaseConfigured) return;
     await supabase.auth.signOut();
   }
 
