@@ -1,0 +1,42 @@
+# Minimal compose file for Light One's future Linux server (spec Step 7).
+# Deliberately not more than this: no orchestration platform, no extra
+# services, no healthcheck choreography — OllamaProvider already handles
+# "ollama isn't ready yet" gracefully (ModelUnavailableError), so
+# llm-platform doesn't need a health-gated startup to behave correctly.
+#
+# `postgres` is provisioned here as scaffolding for the day the Model
+# Registry moves off models.json to a DB-backed source (see
+# llm/src/registry/modelRegistry.ts's doc comment) — nothing in this
+# codebase reads from it yet.
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - '11434:11434'
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-light_one}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-light_one}
+      POSTGRES_DB: ${POSTGRES_DB:-light_one}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+
+  llm-platform:
+    build: .
+    depends_on:
+      - ollama
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      SES_CLASSIFIER_MODEL: ${SES_CLASSIFIER_MODEL:-}
+    command: ['npm', 'run', 'benchmark:ses']
+
+volumes:
+  ollama_data:
+  postgres_data:

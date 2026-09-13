@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "insurance-risk-diagnosis/**"
+      - "products/insurance-risk-diagnosis/**"
       - ".github/workflows/deploy.yml"
   workflow_dispatch: {}
 
@@ -24,14 +24,14 @@ jobs:
       # 診断ロジックはweb/src/calcへ移植して同一のテストで検証しており、
       # ここではfunctions/配下の参照実装が壊れていないことだけを継続確認する。
       - name: Build & test reference Cloud Functions implementation
-        working-directory: insurance-risk-diagnosis/functions
+        working-directory: products/insurance-risk-diagnosis/functions
         run: |
           npm ci
           npm run build
           npm test
 
       - name: Install, test & build web app
-        working-directory: insurance-risk-diagnosis/web
+        working-directory: products/insurance-risk-diagnosis/web
         run: |
           npm ci
           npm test
@@ -43,5 +43,5 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
 
       - name: Deploy to Firebase (Hosting only — Spark plan, no billing required)
-        working-directory: insurance-risk-diagnosis
+        working-directory: products/insurance-risk-diagnosis
         run: npx firebase-tools deploy --only hosting --non-interactive

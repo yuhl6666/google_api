@@ -2,11 +2,11 @@
 node_modules/
 
 # Build output
-functions/lib/
-frontend/dist/
+products/staged-succession/functions/lib/
+products/staged-succession/frontend/dist/
 *.tsbuildinfo
-frontend/vite.config.js
-frontend/vite.config.d.ts
+products/staged-succession/frontend/vite.config.js
+products/staged-succession/frontend/vite.config.d.ts
 
 # Env / secrets
 .env
