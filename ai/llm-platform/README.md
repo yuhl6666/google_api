@@ -1,16 +1,25 @@
 # Light One — Local LLM Platform (Phase 1 + Phase 2 validation harness)
 
-> **Remote environment limitation:** Ollama/model downloads unavailable due to egress allowlist.
-> **Real-model benchmark:** Pending execution on Light One Linux environment.
+> **Remote environment limitation:** applies only to sandboxes with an
+> egress allowlist blocking `ollama.com`/`huggingface.co` — not universal.
+> **Real-model benchmark:** Executed for real on a Light One dev machine with
+> Ollama installed — see "Verified real-model run" below for the actual output.
 >
-> This repo's remote development sandbox blocks outbound access to both
+> Some remote development sandboxes block outbound access to both
 > `ollama.com` and `huggingface.co` (organization egress policy — confirmed
-> via explicit 403 policy denials, not a bug to work around). So nothing
-> in this codebase has ever downloaded Ollama or a model here, and no real
-> local-model benchmark numbers exist yet. Everything in `models/ses/benchmark/`
-> is built and tested end-to-end against `MockLocalModel` instead, and is
-> ready to run for real — unmodified — the moment it reaches a machine
-> where `ollama serve` is actually reachable. See "Phase 2" below.
+> via explicit 403 policy denials in that setting, not a bug to work
+> around). In that case, nothing in this codebase can download Ollama or a
+> model, and `models/ses/benchmark/` still builds and tests end-to-end
+> against `MockLocalModel` instead, unmodified, ready to run for real the
+> moment it reaches a machine where `ollama serve` is reachable.
+>
+> On a machine where Ollama **is** installed and reachable (confirmed on a
+> Light One dev machine, 2026-09-13), the pipeline runs against a real
+> local model with no code changes — see "Verified real-model run" below.
+> The Model Registry's default `ses-classifier` model (`llama3.1:8b`,
+> `llm/src/registry/models.json`) may be larger than what a given machine
+> has pulled; override it per-run with `SES_CLASSIFIER_MODEL` (see
+> "Swapping the SES model" below) without editing the registry.
 
 Foundation for running **multiple task-specific Local/API models** behind
 one Router, instead of one general-purpose LLM for everything. This is a
@@ -128,9 +137,9 @@ Output → Validator → Evaluator) against the 56-example synthetic dataset
 in `models/ses/benchmark/dataset.ts` and prints accuracy / precision /
 recall / F1 / confusion matrix / invalid-JSON rate / latency (avg, p50,
 p95) / per-category accuracy / failure cases / a suggested conclusion. If
-nothing is listening on the configured Ollama endpoint (as in this repo's
-remote sandbox), it prints `SKIPPED: local model unavailable` and exits 0
-— that's the correct, successful outcome here, not a failure.
+nothing is listening on the configured Ollama endpoint, it prints
+`SKIPPED: local model unavailable` and exits 0 — that's a correct,
+successful outcome in an environment with no Ollama, not a failure.
 
 **Swapping the SES model** — no code change needed either way:
 
@@ -141,6 +150,45 @@ SES_CLASSIFIER_MODEL=qwen2.5:7b npm run benchmark:ses
 # persistent: edit the one line in llm/src/registry/models.json
 #   "runtime": { "kind": "ollama", "model": "qwen2.5:7b" }
 ```
+
+**Raising the per-request timeout** on slower/CPU-only/memory-constrained
+hardware — `OllamaProvider`'s default is 15s, which a small local machine
+under load can exceed even for a small model (this is exactly what
+happened on the dev machine noted below until this override was added):
+
+```bash
+SES_CLASSIFIER_MODEL=qwen2.5:0.5b SES_CLASSIFIER_TIMEOUT_MS=60000 npm run benchmark:ses
+```
+
+### Verified real-model run
+
+Confirmed 2026-09-13 on a Light One dev machine (4-core Intel Celeron
+N5095, 5.7GB RAM, CPU-only) with `ollama serve` actually running and
+`qwen2.5:0.5b` pulled (the registry's default `llama3.1:8b` was not pulled
+on this machine and is too large for it):
+
+- A single real `classifySesEmail` call through the full
+  Router → `ses-classifier` → `OllamaProvider` → Ollama → Structured
+  Output → Validator → Evaluator pipeline correctly returned
+  `{ category: 'project', confidence: 1, verified: true }` in ~43s.
+- The first full `npm run benchmark:ses` run against all 56 examples used
+  the (until-then hardcoded) 15s default timeout, and every single request
+  timed out under this machine's memory pressure — 0% accuracy, but with
+  every failure correctly reported as a per-example `ModelTimeoutError`
+  rather than a crash. That gap is what `SES_CLASSIFIER_TIMEOUT_MS`
+  (above) was added to close.
+- A second run with `SES_CLASSIFIER_TIMEOUT_MS=60000` produced the first
+  real (non-timeout-dominated) numbers this repo has ever had for a local
+  model: **17.9% accuracy** (macro F1 16.5%) against the 56-example
+  dataset, average latency ~50.6s/request on this 4-core CPU-only
+  machine, still with some 60s timeouts at the tail (p95 60.0s). The
+  benchmark's own conclusion logic correctly judged this: *"Local model is
+  not yet sufficient on its own ... route to an API model when the
+  Evaluator flags `needsHumanReview=true`."* This is the expected result
+  for a 0.5B model with no fine-tuning (see "Phase 2" below) on
+  CPU-constrained hardware, not a bug — the point of this run was to
+  confirm the pipeline, timeout handling, and benchmark reporting all work
+  against real inference, which they now demonstrably do.
 
 ## Hardware check
 
